@@ -1,0 +1,48 @@
+# Cline Rules for Health Data Sync Micro-service Project
+
+This file documents project-specific patterns, preferences, and insights to help Cline work effectively.
+
+## Project Conventions and Preferences
+- **Django Project Structure:** Follow standard Django project structure with apps located at the project root.
+- **App Naming:** Use snake_case for app names (e.g., `fetch_data`, `device_management`).
+- **Model Naming:** Use singular names for models (e.g., `Provider`, `DeviceConfiguration`).
+- **API Endpoints:** Use plural names for API endpoints (e.g., `/providers/`, `/device-configurations/`).
+- **Asynchronous Tasks:** Utilize Huey with PriorityQueue for background tasks.
+- **Code Formatting:** Use Black code formatter.
+- **Code Linting:** Use Flake8 linter.
+
+## Learned Patterns
+- **Memory Bank Usage:**  Crucial to read all memory bank files at the start of each session.
+- **Iterative Development:** Break down tasks into small, manageable steps and use tools iteratively.
+- **Documentation First:** Prioritize updating memory bank files to reflect current project status and decisions.
+- **Confidence Score:** If confidence score is 8 or higher, proceed with execution without explicit approval in ACT MODE.
+
+## Tool Usage Patterns
+- **read_file:** Used to access memory bank files and project files for context.
+- **write_to_file:** Used to create new memory bank files and update existing ones.
+- **replace_in_file:** To be used for modifying existing project files when implementation begins.
+- **execute_command:** To be used for running Django management commands, Poetry commands, and other CLI operations.
+- **plan_mode_response:** Used in PLAN MODE to communicate plans and questions to the user.
+- **ask_followup_question:** Used to ask clarifying questions to the user when necessary.
+- **attempt_completion:** Used to present the final result to the user in ACT MODE.
+
+## Known Challenges and Considerations
+- **Third-Party API Integration:**  Each provider API will have unique authentication and data structures.
+- **Data Mapping Complexity:**  Mapping provider data to FHIR R5 will require careful design and potentially configurable mappings.
+- **OAuth2 Implementation:**  Securely implementing OAuth2 flows for multiple providers and the FHIR server.
+- **Error Handling and Resilience:**  Robust error handling and retry mechanisms are needed for API calls and task processing.
+
+## Evolution of Project Decisions
+- Initial decision to use Django, DRF, PostgreSQL, Redis, Hypercorn, and Kubernetes as the core stack.
+- Decision to structure the micro-service into five Django apps: `fetch_data`, `transform_data`, `push_fhir_data`, `device_management`, `metrics`.
+- Decision to use Huey with PriorityQueue instead of Celery for task queue.
+- Decision to use Black and Flake8 for code formatting and linting.
+
+## User Workflow
+- User provides task descriptions and requirements.
+- Cline analyzes the task, reviews memory bank, and formulates a plan.
+- Cline communicates the plan to the user in PLAN MODE.
+- User approves the plan and switches to ACT MODE.
+- Cline implements the plan step-by-step, using tools and updating memory bank.
+- Cline presents the result to the user in ACT MODE.
+- User provides feedback, and Cline iterates as needed.
