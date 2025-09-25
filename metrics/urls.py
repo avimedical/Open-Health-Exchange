@@ -1,9 +1,14 @@
-from django.urls import path, include
-from rest_framework import routers
+"""
+Metrics and health check URL configuration.
+"""
+from django.urls import path
+from .views import MetricsView, HealthCheckView, ReadinessCheckView, LivenessCheckView
 
-router = routers.DefaultRouter()
-# router.register(r'your-model', YourViewSet) # Example
+app_name = 'metrics'
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('metrics/', MetricsView.as_view(), name='prometheus-metrics'),
+    path('health/', HealthCheckView.as_view(), name='health-check'),
+    path('ready/', ReadinessCheckView.as_view(), name='readiness-check'),
+    path('live/', LivenessCheckView.as_view(), name='liveness-check'),
 ]
