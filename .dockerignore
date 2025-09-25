@@ -1,0 +1,29 @@
+# Local/dev
+.venv
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swm
+*.swo
+
+# VCS
+.git
+.gitignore
+
+# Tooling
+.mypy_cache
+.vscode
+.claude
+memory-bank
+
+# Tests and caches
+.pytest_cache
+.coverage
+htmlcov
+
+# Docker
+Dockerfile*
+.dockerignore

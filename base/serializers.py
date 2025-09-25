@@ -1,35 +1,105 @@
 from rest_framework import serializers
-from base.models import Provider
+from base.models import Provider, ProviderLink, EHRUser
+
+
+# Unified validation methods and field definitions
+class BaseHealthDataSerializer(serializers.Serializer):
+    """Base serializer with common validation methods and field definitions"""
+
+    # Common field definitions
+    PROVIDER_CHOICES = ['withings', 'fitbit']
+
+    @staticmethod
+    def get_provider_field():
+        """Get standardized provider choice field"""
+        return serializers.ChoiceField(choices=BaseHealthDataSerializer.PROVIDER_CHOICES)
+
+    @staticmethod
+    def get_ehr_user_id_field():
+        """Get standardized EHR user ID field with validation"""
+        return serializers.CharField(max_length=100)
+
+    @staticmethod
+    def get_error_list_field():
+        """Get standardized error list field"""
+        return serializers.ListField(child=serializers.CharField(), required=False, default=list)
+
+    @staticmethod
+    def validate_ehr_user_id(value):
+        """Unified EHR user ID validation"""
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{3,100}$', value):
+            raise serializers.ValidationError(
+                "EHR user ID must be 3-100 characters, alphanumeric, hyphens, and underscores only"
+            )
+        return value
 
 
 class ProviderSerializer(serializers.ModelSerializer):
+    """Serializer for Provider model"""
 
     class Meta:
         model = Provider
-        fields = [
-            'id', 'name', 'provider_type', 'active'
-        ]
+        fields = ['id', 'name', 'provider_type', 'active']
+        read_only_fields = ['id']
 
 
-class FHIRDeviceDefinitionSerializer(serializers.Serializer):
-    """
-    Serializer for FHIR DeviceDefinition resource.
-    """
-    resource_type = serializers.CharField(default="DeviceDefinition")
-    identifier = serializers.CharField(required=False)  # FHIR Identifier type is more complex, using string for now
-    manufacturer = serializers.CharField(required=False)
-    model_number = serializers.CharField(required=False, source='modelNumber')  # Map to FHIR modelNumber
-    type = serializers.CharField(required=False)  # FHIR CodeableConcept type is more complex, using string for now
-    # Define fields based on FHIR DeviceDefinition resource
-    # ... more fields to be added
+class ProviderLinkSerializer(serializers.ModelSerializer):
+    """Serializer for ProviderLink model"""
+    provider = ProviderSerializer(read_only=True)
+
+    class Meta:
+        model = ProviderLink
+        fields = ['id', 'provider', 'external_user_id', 'extra_data', 'linked_at']
+        read_only_fields = ['id', 'extra_data', 'linked_at']
 
 
-class FHIRDeviceSerializer(serializers.Serializer):
-    """
-    Placeholder serializer for FHIR Device resource.
-    """
+class ProviderLinkingRequestSerializer(BaseHealthDataSerializer):
+    """Serializer for provider linking requests"""
+    ehr_user_id = BaseHealthDataSerializer.get_ehr_user_id_field()
+    provider = BaseHealthDataSerializer.get_provider_field()
 
-    resource_type = serializers.CharField(default="Device")
-    # Define fields based on FHIR Device resource
-    # For now, just include a placeholder field
-    placeholder_field = serializers.CharField(required=False)
+    def validate_ehr_user_id(self, value):
+        """Validate EHR user ID format using unified validation"""
+        return BaseHealthDataSerializer.validate_ehr_user_id(value)
+
+
+class SyncStatusSerializer(BaseHealthDataSerializer):
+    """Serializer for sync status responses"""
+    ehr_user_id = serializers.CharField()
+    provider = serializers.CharField()
+    status = serializers.ChoiceField(choices=['pending', 'in_progress', 'completed', 'failed', 'no_recent_sync'])
+    last_sync = serializers.DateTimeField(required=False, allow_null=True)
+    next_sync = serializers.DateTimeField(required=False, allow_null=True)
+    records_synced = serializers.IntegerField(required=False, allow_null=True)
+    errors = BaseHealthDataSerializer.get_error_list_field()
+
+
+class HealthDataCapabilitiesSerializer(serializers.Serializer):
+    """Serializer for health data capabilities"""
+    supported_providers = serializers.ListField(child=serializers.CharField())
+    supported_data_types = serializers.ListField(child=serializers.CharField())
+    webhook_endpoints = serializers.DictField()
+    sync_frequencies = serializers.DictField()
+
+
+class DeviceSyncRequestSerializer(BaseHealthDataSerializer):
+    """Serializer for device sync requests"""
+    ehr_user_id = BaseHealthDataSerializer.get_ehr_user_id_field()
+    provider = BaseHealthDataSerializer.get_provider_field()
+
+    def validate_ehr_user_id(self, value):
+        """Validate EHR user ID format using unified validation"""
+        return BaseHealthDataSerializer.validate_ehr_user_id(value)
+
+
+class DeviceSyncResultSerializer(BaseHealthDataSerializer):
+    """Serializer for device sync results"""
+    message = serializers.CharField()
+    sync_id = serializers.CharField()
+    ehr_user_id = serializers.CharField()
+    provider = serializers.CharField()
+    devices_processed = serializers.IntegerField()
+    associations_created = serializers.IntegerField()
+    success = serializers.BooleanField()
+    errors = BaseHealthDataSerializer.get_error_list_field()

@@ -16,15 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from .views import RootTimeView
 
 import base.urls
-import ingestors.urls
 
 urlpatterns = [
+    path("", RootTimeView.as_view(), name="root-time"),
     path("admin/", admin.site.urls),
     path("social/", include("social_django.urls", namespace="social")),  # Add social_django urls
     path("api/metrics/", include("metrics.urls")),  # Add metrics urls
-    path("api/base/", include(base.urls)),
-    path("api/ingestors/", include(ingestors.urls)),
+    path("api/base/", include(base.urls)),  # Main API endpoints
+    path("webhooks/", include("webhooks.urls", namespace="webhooks")),  # Production webhook endpoints
     path("oidc/", include("mozilla_django_oidc.urls")),
 ]

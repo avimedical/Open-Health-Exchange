@@ -68,6 +68,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "social_django.middleware.SocialAuthExceptionMiddleware",
+    "metrics.middleware.MetricsMiddleware",
 ]
 
 ROOT_URLCONF = "open_health_exchange.urls"
@@ -86,6 +87,9 @@ REST_FRAMEWORK = {
     "TEMPLATE_DIRS": [os.path.join(BASE_DIR, "templates")],
     # Set a default format for responses
     "DEFAULT_CONTENT_NEGOTIATION_CLASS": "rest_framework.negotiation.DefaultContentNegotiation",
+    "DEFAULT_THROTTLE_RATES": {
+        "root_time": "10/minute",
+    },
 }
 
 TEMPLATES = [
@@ -108,7 +112,7 @@ TEMPLATES = [
 
 AUTHENTICATION_BACKENDS = (
     "base.backends.WithingsOAuth2",  # Custom Withings backend
-    "social_core.backends.fitbit.FitbitOAuth2",  # Fitbit backend from python-social-auth
+    "base.backends.FitbitOAuth2",  # Custom Fitbit backend
     "base.backends.OidcAuthenticationBackend",  # Custom OIDC backend
     "django.contrib.auth.backends.ModelBackend",  # Default Django authentication backend
 )
@@ -117,8 +121,8 @@ AUTH_USER_MODEL = "base.EHRUser"  # Custom user model for EHR users
 
 # CONFIGURATION FOR OAUTH2
 RS_URL = os.environ.get("RS_URL", "http://localhost:8000")
-OIDC_RP_CLIENT_ID = os.environ.get("RS_CLIENT_ID", "620076")
-OIDC_RP_CLIENT_SECRET = os.environ.get("RS_CLIENT_SECRET", "0c481c48216903dd98d86842a62f18bb21fe9e546ae5e3540c4f71fc")
+OIDC_RP_CLIENT_ID = os.environ.get("RS_CLIENT_ID", "")
+OIDC_RP_CLIENT_SECRET = os.environ.get("RS_CLIENT_SECRET", "")
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{RS_URL}/oidc/authorize/"
 OIDC_OP_TOKEN_ENDPOINT = f"{RS_URL}/oidc/token/"
 OIDC_OP_USER_ENDPOINT = f"{RS_URL}/oidc/userinfo/"
@@ -142,8 +146,22 @@ SOCIAL_AUTH_FITBIT_SCOPE = ["activity", "heartrate", "location", "nutrition", "p
 
 SOCIAL_AUTH_USER_MODEL = 'base.EHRUser'  # Tell python-social-auth to use custom user model
 
-LOGIN_REDIRECT_URL = "/devices/"  # Redirect URL after successful login, adjust as needed
-LOGIN_ERROR_URL = "/login-error/"  # Redirect URL after login error, adjust as needed
+LOGIN_REDIRECT_URL = "/api/base/link/success/"  # Redirect URL after successful provider linking
+LOGIN_ERROR_URL = "/api/base/link/error/"  # Redirect URL after provider linking error
+
+WEBHOOK_BASE_URL = os.environ.get("WEBHOOK_BASE_URL", "http://localhost:8000/webhooks/")
+
+# Session configuration for production domains
+SESSION_COOKIE_DOMAIN: str | None
+if os.environ.get("ENVIRONMENT") == "production" or "avimedical.info" in os.environ.get("ALLOWED_HOSTS", ""):
+    SESSION_COOKIE_DOMAIN = ".avimedical.info"  # Allow sessions across avimedical.info subdomains
+    SESSION_COOKIE_SECURE = True  # Require HTTPS
+    CSRF_COOKIE_SECURE = True  # Require HTTPS for CSRF
+else:
+    # Development settings
+    SESSION_COOKIE_DOMAIN = None
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 
 # Additional OAuth2 settings
 SOCIAL_AUTH_WITHINGS_SCOPE = ["user.info", "user.metrics", "user.activity"]
@@ -164,42 +182,156 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
     # Custom function to update ProviderLink model
-    "base.pipeline.load_devices",
+    "base.pipeline.initialize_provider_services",
 )
+
+# FHIR Server Configuration
+FHIR_BASE_URL = os.environ.get("FHIR_BASE_URL", "")
+FHIR_AUTH_TOKEN_HEADER = os.environ.get("FHIR_AUTH_TOKEN_HEADER", "Authorization")
+FHIR_AUTH_TOKEN_VALUE = os.environ.get("FHIR_AUTH_TOKEN_VALUE", "")
+
+# Device Mapping Service Configuration
+DEVICE_MAPPING = {
+    'CACHE_TTL': int(os.environ.get("DEVICE_CACHE_TTL", "86400")),  # 24 hours default
+    'NEGATIVE_CACHE_TTL': int(os.environ.get("DEVICE_NEGATIVE_CACHE_TTL", "3600")),  # 1 hour default
+    'CACHE_PREFIX': 'device_mapping',
+    'IDENTIFIER_SYSTEMS': {
+        'fitbit': 'https://api.fitbit.com/device-id',
+        'withings': 'https://api.withings.com/device-id',
+    },
+    'BATCH_SIZE': int(os.environ.get("DEVICE_BATCH_SIZE", "50")),  # Max devices per batch
+}
+
+# API Client Configuration
+API_CLIENT_CONFIG = {
+    'MAX_RETRIES': int(os.environ.get("API_MAX_RETRIES", "3")),
+    'BACKOFF_FACTOR': float(os.environ.get("API_BACKOFF_FACTOR", "1.0")),
+    'TIMEOUT': int(os.environ.get("API_TIMEOUT", "30")),
+    'RATE_LIMIT_WINDOW': int(os.environ.get("API_RATE_LIMIT_WINDOW", "60")),  # seconds
+    'MAX_REQUESTS_PER_WINDOW': int(os.environ.get("API_MAX_REQUESTS_PER_WINDOW", "300")),
+    'ENDPOINTS': {
+        'withings': {
+            'base_url': 'https://wbsapi.withings.net',
+            'token_url': 'https://wbsapi.withings.net/v2/oauth2',
+            'measure_types': {
+                'weight': 1, 'height': 4, 'fat_free_mass': 5, 'fat_ratio': 6,
+                'fat_mass_weight': 8, 'diastolic_bp': 9, 'systolic_bp': 10,
+                'heart_rate': 11, 'temperature': 12, 'spo2': 54,
+                'body_temperature': 71, 'skin_temperature': 73
+            }
+        },
+        'fitbit': {
+            'device_types': ['tracker', 'watch', 'scale', 'aria'],
+            'source_mapping': {
+                'Aria': 'device', 'AriaAir': 'device', 'Withings': 'device',
+                'API': 'user'
+            },
+            'logtype_mapping': {
+                'auto_detected': 'device', 'manual': 'user'
+            }
+        }
+    },
+    'DATA_TYPE_ENDPOINTS': {
+        'withings': {
+            'heart_rate': '/v2/measure',
+            'activity': '/v2/measure',
+            'weight': '/v2/measure',
+            'sleep': '/v2/sleep',
+            'blood_pressure': '/v2/measure'
+        },
+        'fitbit': {
+            'heart_rate': 'activities/heart',
+            'activity': 'activities/steps',
+            'weight': 'body/weight',
+            'sleep': 'sleep',
+            'ecg': '/1/user/-/ecg/list.json',
+            'hrv': '/1/user/-/hrv/date/{date}/all.json'
+        }
+    },
+    'SUPPORTED_DATA_TYPES': {
+        'withings': ['heart_rate', 'steps', 'weight', 'blood_pressure'],
+        'fitbit': ['heart_rate', 'steps', 'weight', 'sleep', 'ecg', 'rr_intervals', 'hrv']
+    }
+}
 
 # Disable new user creation - we only want to link accounts
 SOCIAL_AUTH_CREATE_USERS = False
 
-# Enhanced logging for oauth debugging
+# Production-ready structured logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        "json": {
+            "()": "metrics.logging.JsonFormatter",
+        },
         "verbose": {
-            "format": "{levelname} {asctime} {module} {message}",
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
             "style": "{",
         },
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",
+            "level": "INFO",
             "class": "logging.StreamHandler",
-            "formatter": "verbose",
+            "formatter": "json" if os.environ.get("ENVIRONMENT") == "production" else "verbose",
         },
     },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"],
+    },
     "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "social_core": {
             "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": True,
+            "level": "INFO",
+            "propagate": False,
         },
         "base": {
             "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": True,
+            "level": "INFO",
+            "propagate": False,
+        },
+        "ingestors": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "transformers": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "publishers": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "metrics": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "webhooks": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
     },
 }
+
+# Application version for metrics
+APPLICATION_VERSION = os.environ.get("APPLICATION_VERSION", "1.0.0")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 
 WSGI_APPLICATION = "open_health_exchange.wsgi.application"
 
@@ -242,25 +374,53 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Huey settings
-HUEY_CONFIG = {
-    "immediate": False,
-    "logfile": "huey.log",
-    "loglevel": "INFO",
-    "consumer": {"workers": 1, "worker_type": "thread"},
-    "redis": {
-        "host": "localhost",
-        "port": 6379,
-        "db": 0,
-    },
-}
+# Huey settings with Redis connection pool
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+import redis
+from urllib.parse import urlparse
+from huey import PriorityRedisExpireHuey
+
+redis_url = urlparse(REDIS_URL)
+
+# Redis 8 compatible connection pool
+redis_pool = redis.ConnectionPool(
+    host=redis_url.hostname or 'localhost',
+    port=redis_url.port or 6379,
+    db=int(redis_url.path.lstrip('/')) if redis_url.path else 0,
+    password=redis_url.password,
+    username=redis_url.username or 'default',
+    max_connections=20,
+    retry_on_timeout=True,
+    socket_connect_timeout=15,
+    socket_timeout=15,
+    health_check_interval=120,
+    socket_keepalive=True,
+    socket_keepalive_options={},
+    decode_responses=False,
+    retry_on_error=[redis.ConnectionError, redis.TimeoutError],
+    connection_class=redis.Connection
+)
+
+HUEY = PriorityRedisExpireHuey(
+    'open-health-exchange',
+    connection_pool=redis_pool,
+    expire_time=259200,  # 72 hours
+    utc=True
+)
+
+# Use different DB (1) for cache to avoid conflicts with Huey (DB 0)
+CACHE_REDIS_URL = os.environ.get("REDIS_CACHE_URL", "redis://localhost:6379/1")
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",  # Use the same Redis instance as Huey, but a different DB (e.g., DB 1)
+        "LOCATION": CACHE_REDIS_URL,
         "OPTIONS": {
-            "client_class": "django_redis.client.DefaultClient",
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "decode_responses": True,
+            }
         }
     }
 }
@@ -273,3 +433,92 @@ STATIC_URL = "static/"
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Unified Configuration - Eliminates hardcoded values throughout codebase
+# Consolidates timeouts, batch sizes, URLs, and other constants
+
+# FHIR Client Configuration
+FHIR_CLIENT_CONFIG = {
+    'TIMEOUT': int(os.environ.get("FHIR_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
+    'BATCH_SIZE': int(os.environ.get("FHIR_BATCH_SIZE", "100")),  # Standard FHIR batch size
+    'MAX_RETRIES': int(os.environ.get("FHIR_MAX_RETRIES", "3")),
+    'BACKOFF_FACTOR': float(os.environ.get("FHIR_BACKOFF_FACTOR", "1.0")),
+}
+
+# Webhook Configuration
+WEBHOOK_CONFIG = {
+    'TIMEOUT': int(os.environ.get("WEBHOOK_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
+    'CACHE_TIMEOUT': int(os.environ.get("WEBHOOK_CACHE_TIMEOUT", "60")),  # Health check cache
+    'MAX_RETRIES': int(os.environ.get("WEBHOOK_MAX_RETRIES", "3")),
+}
+
+# Circuit Breaker Configuration
+CIRCUIT_BREAKER_CONFIG = {
+    'TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_TIMEOUT", "60.0")),  # Eliminates 3 hardcoded timeout=60.0
+    'FAILURE_THRESHOLD': int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
+    'FHIR_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
+    'WEBHOOK_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
+    'PROVIDER_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
+}
+
+# Health Data Processing Configuration
+HEALTH_DATA_CONFIG = {
+    'BATCH_SIZES': {
+        'PUBLISHER': int(os.environ.get("HEALTH_DATA_PUBLISH_BATCH_SIZE", "100")),  # Eliminates hardcoded batch_size=100
+        'PROCESSOR': int(os.environ.get("HEALTH_DATA_PROCESS_BATCH_SIZE", "500")),  # Eliminates hardcoded batch_size=500
+        'INITIAL_SYNC': int(os.environ.get("HEALTH_DATA_INITIAL_BATCH_SIZE", "1000")),  # Eliminates hardcoded batch_size=1000
+        'TEST': int(os.environ.get("HEALTH_DATA_TEST_BATCH_SIZE", "10")),  # Test environments
+    },
+    'LOOKBACK_DAYS': int(os.environ.get("HEALTH_DATA_LOOKBACK_DAYS", "30")),  # Eliminates hardcoded 30 days
+    'FIELD_LENGTHS': {
+        'EHR_USER_ID': int(os.environ.get("EHR_USER_ID_MAX_LENGTH", "100")),  # Eliminates hardcoded max_length=100
+        'EHR_USER_ID_MIN': int(os.environ.get("EHR_USER_ID_MIN_LENGTH", "3")),  # Eliminates hardcoded min 3 chars
+    }
+}
+
+# Cache Timeout Configuration
+CACHE_TIMEOUTS = {
+    'DEVICE_CACHE': int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
+    'ASSOCIATION_CACHE': int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
+    'WEBHOOK_HEALTH': int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
+}
+
+# Huey Task Configuration
+HUEY_TASK_CONFIG = {
+    'DEFAULT_TIMEOUT': int(os.environ.get("HUEY_DEFAULT_TIMEOUT", "3600")),  # Eliminates hardcoded timeout=3600
+    'HEALTH_SYNC_TIMEOUT': int(os.environ.get("HUEY_HEALTH_SYNC_TIMEOUT", "3600")),
+    'DEVICE_SYNC_TIMEOUT': int(os.environ.get("HUEY_DEVICE_SYNC_TIMEOUT", "1800")),
+}
+
+# System URLs Configuration - Eliminates hardcoded URL patterns
+SYSTEM_URLS = {
+    'PROVIDER_BASE': "https://api.{provider}.com",  # Template for provider URLs
+    'OPEN_HEALTH_EXCHANGE_BASE': "https://open-health-exchange.com",
+    'FHIR_SYSTEMS': {
+        'SNOMED': "http://snomed.info/sct",
+        'LOINC': "http://loinc.org",
+        'UCUM': "http://unitsofmeasure.org",
+        'OBSERVATION_CATEGORY': "http://terminology.hl7.org/CodeSystem/observation-category",
+        'OBSERVATION_VALUE': "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        'DEVICE_VERSION_TYPE': "http://terminology.hl7.org/CodeSystem/device-version-type",
+        'DEVICE_PROPERTY_TYPE': "http://terminology.hl7.org/CodeSystem/device-property-type",
+        'DEVICE_ASSOCIATION_CATEGORY': "http://hl7.org/fhir/device-association-category",
+        'DEVICE_ASSOCIATION_STATUS': "http://hl7.org/fhir/device-association-status",
+        'DEVICE_ASSOCIATION_OPERATION_STATUS': "http://hl7.org/fhir/device-association-operation-status",
+    }
+}
+
+# OAuth Provider URLs - Eliminates hardcoded OAuth endpoints
+OAUTH_PROVIDER_URLS = {
+    'WITHINGS': {
+        'AUTHORIZATION_URL': "https://account.withings.com/oauth2_user/authorize2",
+        'ACCESS_TOKEN_URL': "https://wbsapi.withings.net/v2/oauth2",
+        'API_BASE': "https://wbsapi.withings.net",
+    },
+    'FITBIT': {
+        'AUTHORIZATION_URL': "https://www.fitbit.com/oauth2/authorize",
+        'ACCESS_TOKEN_URL': "https://api.fitbit.com/oauth2/token",
+        'API_BASE': "https://api.fitbit.com",
+        'PROFILE_URL': "https://api.fitbit.com/1/user/-/profile.json",
+    }
+}

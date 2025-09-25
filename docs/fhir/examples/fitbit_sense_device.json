@@ -1,0 +1,131 @@
+{
+  "resourceType": "Device",
+  "id": "device-fitbit-816713257",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/StructureDefinition/Device"],
+    "lastUpdated": "2024-01-15T12:00:00Z"
+  },
+  "identifier": [
+    {
+      "use": "official",
+      "system": "https://www.fitbit.com/devices",
+      "value": "816713257",
+      "assigner": {
+        "display": "Fitbit Health Platform"
+      }
+    },
+    {
+      "use": "secondary",
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+          "code": "SNO",
+          "display": "Serial Number"
+        }]
+      },
+      "value": "16ADD56D54GD"
+    }
+  ],
+  "status": "active",
+  "statusReason": [
+    {
+      "coding": [{
+        "system": "http://terminology.hl7.org/CodeSystem/device-status-reason",
+        "code": "online",
+        "display": "Online"
+      }]
+    }
+  ],
+  "manufacturer": "Fitbit",
+  "modelNumber": "Sense",
+  "serialNumber": "16ADD56D54GD",
+  "type": [
+    {
+      "coding": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "258158006",
+          "display": "Electrocardiograph monitor"
+        }
+      ],
+      "text": "Electrocardiograph monitor"
+    }
+  ],
+  "capability": [
+    {
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/device-capability",
+          "code": "ecg-recording"
+        }],
+        "text": "ECG Recording"
+      },
+      "description": [{"text": "Single-lead electrocardiogram recording with arrhythmia detection"}]
+    }
+  ],
+  "property": [
+    {
+      "type": {"text": "ECG Capability"},
+      "valueCodeableConcept": {"text": "Single-lead ECG with AF detection"}
+    },
+    {
+      "type": {"text": "Battery Level"},
+      "valueQuantity": {
+        "value": 60,
+        "unit": "%",
+        "system": "http://unitsofmeasure.org",
+        "code": "%"
+      }
+    },
+    {
+      "type": {"text": "Last Sync"},
+      "valueDateTime": "2024-01-15T11:30:00Z"
+    },
+    {
+      "type": {"text": "Connectivity"},
+      "valueCodeableConcept": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/device-property",
+          "code": "wireless"
+        }],
+        "text": "Fitbit Cloud Sync"
+      }
+    }
+  ],
+  "name": [
+    {
+      "value": "Sense",
+      "type": "model-name"
+    },
+    {
+      "value": "Sarah's Fitbit Sense",
+      "type": "user-friendly-name"
+    }
+  ],
+  "owner": {
+    "reference": "Patient/22222222-3333-4444-5555-666666666666"
+  },
+  "location": {
+    "display": "Patient's Home"
+  },
+  "endpoint": [
+    {
+      "display": "Fitbit API"
+    }
+  ],
+  "safety": [
+    {
+      "coding": [{
+        "system": "urn:oid:2.16.840.1.113883.3.26.1.1",
+        "code": "N",
+        "display": "Not MRI Safe"
+      }]
+    }
+  ],
+  "note": [
+    {
+      "time": "2024-01-15T12:00:00Z",
+      "text": "Device synced from Fitbit Health Platform"
+    }
+  ]
+}

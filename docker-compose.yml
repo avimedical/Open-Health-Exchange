@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+  web:
+    build: .
+    image: open-health-exchange:dev
+    container_name: ohe-web
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      DJANGO_SETTINGS_MODULE: open_health_exchange.settings
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      REDIS_URL: redis://valkey:6379/0
+      REDIS_CACHE_URL: redis://valkey:6379/1
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - valkey
+
+  huey:
+    build: .
+    image: open-health-exchange:dev
+    container_name: ohe-huey
+    command: ["python", "manage.py", "run_huey", "-V", "--workers", "1", "--worker-type", "thread"]
+    environment:
+      DJANGO_SETTINGS_MODULE: open_health_exchange.settings
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      REDIS_URL: redis://valkey:6379/0
+      REDIS_CACHE_URL: redis://valkey:6379/1
+    depends_on:
+      - postgres
+      - valkey
+
+  valkey:
+    image: ghcr.io/valkey-io/valkey:8-bookworm
+    container_name: ohe-valkey
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ohe-postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "5432:5432"
+
+volumes:
+  # Named volumes can be added later for persistence if needed
+  # e.g., postgres-data:
