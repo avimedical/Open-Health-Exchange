@@ -1,7 +1,7 @@
 import logging
-from social_core.exceptions import AuthForbidden
-from mozilla_django_oidc.contrib.drf import get_oidc_backend
 
+from mozilla_django_oidc.contrib.drf import get_oidc_backend
+from social_core.exceptions import AuthForbidden
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
     logger.info(f"Starting user association for social auth - Backend: {backend.name}")
 
     # Debug session data
-    session_keys = [k for k in strategy.session.keys() if 'linking' in k]
+    session_keys = [k for k in strategy.session.keys() if "linking" in k]
     logger.info(f"Session keys with 'linking': {session_keys}")
 
     if not user:
@@ -33,6 +33,7 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
             logger.info(f"Found EHR user ID in session: {ehr_user_id}")
             try:
                 from base.models import EHRUser
+
                 target_user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
                 logger.info(f"Successfully retrieved user {target_user.username} for provider linking")
 
@@ -50,7 +51,7 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
         # Method 2: Bearer token from request/session (API-based auth)
         bearer_token = strategy.request.GET.get("token") or strategy.session_get("token")
         if bearer_token:
-            logger.info(f"Attempting OIDC authentication with bearer token")
+            logger.info("Attempting OIDC authentication with bearer token")
             try:
                 current_user = get_oidc_backend().get_or_create_user(bearer_token, None, None)
                 if current_user and current_user.is_authenticated:
@@ -60,7 +61,7 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
                 logger.warning(f"OIDC authentication failed: {e}")
 
         # Method 3: Currently authenticated user (fallback)
-        if hasattr(strategy.request, 'user') and strategy.request.user.is_authenticated:
+        if hasattr(strategy.request, "user") and strategy.request.user.is_authenticated:
             logger.info(f"Using currently authenticated user {strategy.request.user.username}")
             return {"user": strategy.request.user}
 
@@ -92,7 +93,7 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
 
     try:
         # Get provider configuration
-        from ingestors.constants import Provider, PROVIDER_CONFIGS
+        from ingestors.constants import PROVIDER_CONFIGS, Provider
 
         try:
             provider_enum = Provider(provider_name)
@@ -106,14 +107,14 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
 
         # Get the access token from the response/extra data
         access_token = None
-        if hasattr(user, 'social_auth'):
+        if hasattr(user, "social_auth"):
             social_user = user.social_auth.filter(provider=provider_name).first()
             if social_user:
                 access_token = social_user.access_token
 
         # If we don't have the token from social_user, try to get it from response
         if not access_token and response:
-            access_token = response.get('access_token')
+            access_token = response.get("access_token")
 
         if not access_token:
             logger.error(f"No access token found for {provider_name} provider")
@@ -121,11 +122,9 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
 
         # Get configured data types from database provider settings
         from base.models import Provider as ProviderModel
+
         try:
-            provider_db = ProviderModel.objects.get(
-                provider_type=provider_name,
-                active=True
-            )
+            provider_db = ProviderModel.objects.get(provider_type=provider_name, active=True)
             effective_data_types = provider_db.get_effective_data_types()
             webhook_enabled = provider_db.is_webhook_enabled()
         except ProviderModel.DoesNotExist:
@@ -136,14 +135,11 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
 
         # Import and queue both device and health sync tasks in parallel
         try:
-            from ingestors.tasks import sync_user_devices, ensure_webhook_subscriptions
             from ingestors.health_data_tasks import sync_user_health_data_initial
+            from ingestors.tasks import ensure_webhook_subscriptions, sync_user_devices
 
             # Queue device sync (high priority)
-            sync_user_devices(
-                user.ehr_user_id,
-                provider_name
-            )
+            sync_user_devices(user.ehr_user_id, provider_name)
 
             # Queue health data sync (low priority for initial sync)
             if effective_data_types:  # Only sync if data types are configured
@@ -151,16 +147,12 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
                     user.ehr_user_id,
                     provider_name,
                     lookback_days=30,  # Initial sync covers last 30 days
-                    data_types=effective_data_types
+                    data_types=effective_data_types,
                 )
 
             # Queue webhook subscription creation (medium priority, async)
             if webhook_enabled and effective_data_types:
-                ensure_webhook_subscriptions(
-                    user.ehr_user_id,
-                    provider_name,
-                    data_types=effective_data_types
-                )
+                ensure_webhook_subscriptions(user.ehr_user_id, provider_name, data_types=effective_data_types)
                 logger.info(f"Queued webhook subscription creation for user {user.ehr_user_id}")
             else:
                 logger.info(f"Webhooks disabled or no data types configured for {provider_name}")
@@ -173,4 +165,3 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
     except Exception as e:
         logger.error(f"Error initializing provider services for user {user.username}: {e}")
         # Don't fail the OAuth flow if service initialization fails
-        pass

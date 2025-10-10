@@ -9,7 +9,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -25,7 +24,12 @@ class Migration(migrations.Migration):
                 (
                     "provider_type",
                     models.CharField(
-                        choices=[("withings", "Withings"), ("fitbit", "Fitbit"), ("beurer", "Beurer"), ("omron", "Omron")],
+                        choices=[
+                            ("withings", "Withings"),
+                            ("fitbit", "Fitbit"),
+                            ("beurer", "Beurer"),
+                            ("omron", "Omron"),
+                        ],
                         default="withings",
                         max_length=50,
                     ),
@@ -65,7 +69,9 @@ class Migration(migrations.Migration):
                 (
                     "is_staff",
                     models.BooleanField(
-                        default=False, help_text="Designates whether the user can log into this admin site.", verbose_name="staff status"
+                        default=False,
+                        help_text="Designates whether the user can log into this admin site.",
+                        verbose_name="staff status",
                     ),
                 ),
                 (

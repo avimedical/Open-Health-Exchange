@@ -34,8 +34,9 @@ python manage.py runserver       # Start Django development server
 
 ### Code Quality
 ```bash
-black .                          # Format code (line length: 120)
-flake8                          # Lint code
+ruff check .                     # Lint code (replaces flake8 + black)
+ruff format .                    # Format code (line length: 120)
+ruff check --fix .               # Auto-fix issues
 ```
 
 ### Background Tasks
@@ -69,6 +70,7 @@ python test_health_sync_phase1.py    # Test Phase 1 health sync
 - **FHIR**: fhirpy library for FHIR R5 interaction
 - **OAuth2**: python-social-auth with custom backends
 - **Authentication**: mozilla-django-oidc for OIDC integration
+- **Code Quality**: Ruff (v0.14.0+) for linting and formatting
 
 ### Configuration
 - Environment variables loaded via python-dotenv from `.env` file
@@ -76,6 +78,87 @@ python test_health_sync_phase1.py    # Test Phase 1 health sync
 - Custom user model: `base.EHRUser`
 - Redis used for both Huey task queue and Django caching
 - Huey configured with PriorityRedisExpireHuey for Redis 8 compatibility with connection pooling
+
+### Datetime Handling Standards
+
+**ALL datetimes in this project MUST be timezone-aware and stored in UTC.**
+
+#### Core Principles
+1. **Always UTC**: All datetime operations default to UTC timezone
+2. **ISO 8601 Format**: All datetime strings use ISO 8601 format with 'Z' suffix (e.g., `"2025-01-15T14:30:00Z"`)
+3. **Django Utilities**: Use Django's built-in `timezone` and `dateparse` utilities from `django.utils`
+4. **Never Naive**: Never create or store naive (timezone-unaware) datetimes
+
+#### Required Imports
+```python
+from django.utils import timezone, dateparse
+from datetime import datetime
+```
+
+#### Standard Patterns
+
+**Current Time:**
+```python
+# ✅ CORRECT
+now = timezone.now()  # Returns timezone-aware datetime in UTC
+
+# ❌ WRONG - Never use these
+now = datetime.now()  # Naive datetime
+now = datetime.utcnow()  # Deprecated, naive datetime
+```
+
+**Parsing ISO Strings:**
+```python
+# ✅ CORRECT
+dt = dateparse.parse_datetime("2025-01-15T14:30:00Z")
+if dt:
+    dt = dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+# ❌ WRONG
+dt = datetime.fromisoformat(iso_string)  # May be naive
+```
+
+**Parsing Unix Timestamps:**
+```python
+# ✅ CORRECT
+dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+# ❌ WRONG
+dt = datetime.fromtimestamp(timestamp)  # Naive, local timezone
+```
+
+**Parsing Date Strings:**
+```python
+# ✅ CORRECT
+date_obj = dateparse.parse_date("2025-01-15")
+if date_obj:
+    dt = datetime.combine(date_obj, datetime.min.time(), tzinfo=timezone.utc)
+
+# ❌ WRONG
+dt = datetime.strptime(date_string, "%Y-%m-%d")  # Naive datetime
+```
+
+**Formatting to ISO 8601:**
+```python
+# ✅ CORRECT
+iso_string = timezone.now().isoformat()  # Includes timezone info
+iso_string_with_z = timezone.now().isoformat() + "Z"  # For FHIR compatibility
+
+# ❌ WRONG
+iso_string = str(datetime.now())  # No timezone info
+```
+
+#### Database Models
+- Django's `DateTimeField(auto_now_add=True)` and `DateTimeField(auto_now=True)` automatically use timezone-aware datetimes when `USE_TZ = True` in settings
+- All manual datetime assignments must use `timezone.now()`
+
+#### API Responses
+- All API responses must return ISO 8601 formatted datetime strings with timezone information
+- FHIR resources should use ISO 8601 with 'Z' suffix for UTC times
+
+#### Validation
+- Ruff is configured to detect timezone-naive datetime operations (DTZ rules)
+- CI/CD pipeline enforces these standards via `ruff check`
 
 ### Data Flow Architecture
 1. **Provider Connection**: Users connect to health data providers via OAuth2 flow (`/api/base/link/{provider}/`)

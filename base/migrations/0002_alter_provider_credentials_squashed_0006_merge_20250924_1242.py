@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("base", "0002_alter_provider_credentials"),
         ("base", "0003_providerlink_extra_data_and_more"),

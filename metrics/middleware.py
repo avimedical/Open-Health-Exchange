@@ -1,9 +1,12 @@
 """
 Django middleware for metrics collection.
 """
-import time
+
 import logging
+import time
+
 from django.utils.deprecation import MiddlewareMixin
+
 from .collectors import metrics
 
 logger = logging.getLogger(__name__)
@@ -22,7 +25,7 @@ class MetricsMiddleware(MiddlewareMixin):
         try:
             # Calculate request duration
             duration = None
-            if hasattr(request, '_metrics_start_time'):
+            if hasattr(request, "_metrics_start_time"):
                 duration = time.time() - request._metrics_start_time
 
             # Extract endpoint from path
@@ -30,10 +33,7 @@ class MetricsMiddleware(MiddlewareMixin):
 
             # Record the API request
             metrics.record_api_request(
-                method=request.method,
-                endpoint=endpoint,
-                status_code=response.status_code,
-                duration=duration
+                method=request.method, endpoint=endpoint, status_code=response.status_code, duration=duration
             )
 
         except Exception as e:
@@ -45,17 +45,12 @@ class MetricsMiddleware(MiddlewareMixin):
         """Record exceptions as 500 errors."""
         try:
             duration = None
-            if hasattr(request, '_metrics_start_time'):
+            if hasattr(request, "_metrics_start_time"):
                 duration = time.time() - request._metrics_start_time
 
             endpoint = self._get_endpoint_pattern(request.path)
 
-            metrics.record_api_request(
-                method=request.method,
-                endpoint=endpoint,
-                status_code=500,
-                duration=duration
-            )
+            metrics.record_api_request(method=request.method, endpoint=endpoint, status_code=500, duration=duration)
 
         except Exception as e:
             logger.warning(f"Failed to record exception metrics: {e}")
@@ -65,11 +60,11 @@ class MetricsMiddleware(MiddlewareMixin):
     def _get_endpoint_pattern(self, path: str) -> str:
         """Extract a normalized endpoint pattern from the request path."""
         # Remove leading/trailing slashes and normalize
-        path = path.strip('/')
+        path = path.strip("/")
 
         # Common API patterns
-        if path.startswith('api/'):
-            parts = path.split('/')
+        if path.startswith("api/"):
+            parts = path.split("/")
             if len(parts) >= 2:
                 # api/base/providers/ -> api/base/providers
                 if len(parts) >= 3:
@@ -77,14 +72,14 @@ class MetricsMiddleware(MiddlewareMixin):
                 return f"{parts[0]}/{parts[1]}"
 
         # Webhook patterns
-        if path.startswith('webhooks/'):
-            parts = path.split('/')
+        if path.startswith("webhooks/"):
+            parts = path.split("/")
             if len(parts) >= 2:
                 return f"webhooks/{parts[1]}"
 
         # Health checks and admin
-        if path in ['health', 'health/', 'admin', 'admin/', 'metrics', 'metrics/']:
-            return path.rstrip('/')
+        if path in ["health", "health/", "admin", "admin/", "metrics", "metrics/"]:
+            return path.rstrip("/")
 
         # Default to path without parameters
-        return path or 'root'
+        return path or "root"

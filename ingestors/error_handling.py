@@ -1,12 +1,14 @@
 """
 Production-ready error handling for health data operations.
 """
+
 import logging
 import time
 import traceback
-from functools import wraps
-from typing import Callable, Any, Optional, Dict
+from collections.abc import Callable
 from enum import Enum
+from functools import wraps
+from typing import Any
 
 from metrics.collectors import metrics
 
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ErrorType(Enum):
     """Types of errors that can occur."""
+
     API_ERROR = "api_error"
     AUTH_ERROR = "auth_error"
     RATE_LIMIT_ERROR = "rate_limit_error"
@@ -26,7 +29,7 @@ class ErrorType(Enum):
 class HealthDataError(Exception):
     """Base exception for health data operations."""
 
-    def __init__(self, message: str, error_type: ErrorType, provider: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, error_type: ErrorType, provider: str | None = None, **kwargs):
         super().__init__(message)
         self.error_type = error_type
         self.provider = provider
@@ -41,6 +44,7 @@ def error_handler(provider: str, operation: str):
         provider: Provider name (e.g., 'withings', 'fitbit')
         operation: Operation name (e.g., 'heart_rate_fetch', 'device_sync')
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -54,10 +58,7 @@ def error_handler(provider: str, operation: str):
                 # Record success metrics
                 duration = time.time() - start_time
                 metrics.record_sync_operation(
-                    provider=provider,
-                    operation_type=operation,
-                    status="success",
-                    duration=duration
+                    provider=provider, operation_type=operation, status="success", duration=duration
                 )
 
                 return result
@@ -71,51 +72,43 @@ def error_handler(provider: str, operation: str):
 
                 # Record error metrics
                 metrics.record_sync_operation(
-                    provider=provider,
-                    operation_type=operation,
-                    status="error",
-                    duration=duration
+                    provider=provider, operation_type=operation, status="error", duration=duration
                 )
                 metrics.record_provider_api_error(provider, error_type.value)
 
                 # Log error with context
                 logger.error(
-                    f"Operation failed",
+                    "Operation failed",
                     extra={
-                        'provider': provider,
-                        'operation': operation,
-                        'error_type': error_type.value,
-                        'error_message': error_message,
-                        'duration': duration,
-                        'traceback': traceback.format_exc()
-                    }
+                        "provider": provider,
+                        "operation": operation,
+                        "error_type": error_type.value,
+                        "error_message": error_message,
+                        "duration": duration,
+                        "traceback": traceback.format_exc(),
+                    },
                 )
 
                 # Handle specific error types
                 if error_type == ErrorType.RATE_LIMIT_ERROR:
                     metrics.record_rate_limit(provider)
                     raise HealthDataError(
-                        f"Rate limit exceeded for {provider}",
-                        error_type,
-                        provider=provider,
-                        original_error=e
+                        f"Rate limit exceeded for {provider}", error_type, provider=provider, original_error=e
                     )
                 elif error_type == ErrorType.AUTH_ERROR:
                     raise HealthDataError(
-                        f"Authentication failed for {provider}",
-                        error_type,
-                        provider=provider,
-                        original_error=e
+                        f"Authentication failed for {provider}", error_type, provider=provider, original_error=e
                     )
                 else:
                     raise HealthDataError(
                         f"Operation {operation} failed for {provider}: {error_message}",
                         error_type,
                         provider=provider,
-                        original_error=e
+                        original_error=e,
                     )
 
         return wrapper
+
     return decorator
 
 
@@ -155,7 +148,7 @@ class RetryHandler:
         base_delay: float = 1.0,
         max_delay: float = 60.0,
         backoff_factor: float = 2.0,
-        retryable_errors: tuple = (ErrorType.NETWORK_ERROR, ErrorType.API_ERROR)
+        retryable_errors: tuple = (ErrorType.NETWORK_ERROR, ErrorType.API_ERROR),
     ):
         self.max_retries = max_retries
         self.base_delay = base_delay
@@ -184,19 +177,16 @@ class RetryHandler:
                         raise
 
                     # Calculate delay with exponential backoff
-                    delay = min(
-                        self.base_delay * (self.backoff_factor ** attempt),
-                        self.max_delay
-                    )
+                    delay = min(self.base_delay * (self.backoff_factor**attempt), self.max_delay)
 
                     logger.warning(
                         f"Attempt {attempt + 1} failed, retrying in {delay}s",
                         extra={
-                            'attempt': attempt + 1,
-                            'max_retries': self.max_retries,
-                            'delay': delay,
-                            'error': str(e)
-                        }
+                            "attempt": attempt + 1,
+                            "max_retries": self.max_retries,
+                            "delay": delay,
+                            "error": str(e),
+                        },
                     )
 
                     time.sleep(delay)
@@ -204,29 +194,22 @@ class RetryHandler:
                 except Exception as e:
                     # Convert non-HealthDataError exceptions
                     error_type = _classify_error(e)
-                    health_error = HealthDataError(
-                        str(e),
-                        error_type,
-                        original_error=e
-                    )
+                    health_error = HealthDataError(str(e), error_type, original_error=e)
                     last_exception = health_error
 
                     if error_type not in self.retryable_errors or attempt == self.max_retries:
                         raise health_error
 
-                    delay = min(
-                        self.base_delay * (self.backoff_factor ** attempt),
-                        self.max_delay
-                    )
+                    delay = min(self.base_delay * (self.backoff_factor**attempt), self.max_delay)
 
                     logger.warning(
                         f"Attempt {attempt + 1} failed, retrying in {delay}s",
                         extra={
-                            'attempt': attempt + 1,
-                            'max_retries': self.max_retries,
-                            'delay': delay,
-                            'error': str(e)
-                        }
+                            "attempt": attempt + 1,
+                            "max_retries": self.max_retries,
+                            "delay": delay,
+                            "error": str(e),
+                        },
                     )
 
                     time.sleep(delay)

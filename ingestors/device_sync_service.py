@@ -1,16 +1,19 @@
 """
 Modern device synchronization service
 """
+
 import logging
-from typing import Protocol, runtime_checkable, Any
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any, Protocol, runtime_checkable
 
-from .device_manager import DeviceManagerFactory, DeviceManager
-from .constants import Provider, DeviceData
-from transformers.fhir_transformers import DeviceTransformer, DeviceAssociationTransformer
+from django.utils import timezone
+
 from publishers.fhir.client import FHIRClient
+from transformers.fhir_transformers import DeviceAssociationTransformer, DeviceTransformer
 
+from .constants import DeviceData, Provider
+from .device_manager import DeviceManagerFactory
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +21,14 @@ logger = logging.getLogger(__name__)
 @runtime_checkable
 class FHIRPublisher(Protocol):
     """Protocol for FHIR publishers"""
+
     def publish_resource(self, resource_type: str, resource_data: dict) -> dict: ...
 
 
 @dataclass(slots=True)
 class SyncResult:
     """Result of device synchronization"""
+
     user_id: str
     provider: Provider
     processed_devices: int = 0
@@ -38,7 +43,7 @@ class SyncResult:
         if self.errors is None:
             self.errors = []
         if self.sync_timestamp is None:
-            self.sync_timestamp = datetime.now(timezone.utc).isoformat()
+            self.sync_timestamp = datetime.now(UTC).isoformat()
 
 
 class DeviceSyncService:
@@ -51,10 +56,7 @@ class DeviceSyncService:
         self.logger = logging.getLogger(f"{__name__}.DeviceSyncService")
 
     def sync_user_devices(
-        self,
-        user_id: str,
-        provider: Provider | str,
-        patient_reference: str | None = None
+        self, user_id: str, provider: Provider | str, patient_reference: str | None = None
     ) -> SyncResult:
         """
         Synchronize devices for a user from a specific provider
@@ -96,14 +98,10 @@ class DeviceSyncService:
 
                     # Create FHIR DeviceAssociation
                     device_ref = f"Device/{device_resource['id']}"
-                    association_resource = self._publish_association(
-                        device, patient_reference, device_ref
-                    )
+                    association_resource = self._publish_association(device, patient_reference, device_ref)
                     processed_associations.append(association_resource)
 
-                    self.logger.info(
-                        f"Successfully processed device {device.provider_device_id}"
-                    )
+                    self.logger.info(f"Successfully processed device {device.provider_device_id}")
 
                 except Exception as e:
                     error_msg = f"Error processing device {device.provider_device_id}: {e}"
@@ -151,22 +149,13 @@ class DeviceSyncService:
             self.logger.error(f"Failed to publish device {device.provider_device_id}: {e}")
             raise
 
-    def _publish_association(
-        self,
-        device: DeviceData,
-        patient_ref: str,
-        device_ref: str
-    ) -> dict:
+    def _publish_association(self, device: DeviceData, patient_ref: str, device_ref: str) -> dict:
         """Publish device association to FHIR server"""
         try:
-            fhir_association = self.association_transformer.transform(
-                device, patient_ref, device_ref
-            )
+            fhir_association = self.association_transformer.transform(device, patient_ref, device_ref)
             return self.fhir_client.create_resource("DeviceAssociation", fhir_association)
         except Exception as e:
-            self.logger.error(
-                f"Failed to publish association for device {device.provider_device_id}: {e}"
-            )
+            self.logger.error(f"Failed to publish association for device {device.provider_device_id}: {e}")
             raise
 
     def get_sync_statistics(self, user_id: str) -> dict[str, Any]:
@@ -180,24 +169,18 @@ class DeviceSyncService:
             total_devices = device_bundle.get("total", 0)
 
             # Search for associations
-            association_bundle = self.fhir_client.search_resource("DeviceAssociation", {
-                "subject": patient_ref
-            })
+            association_bundle = self.fhir_client.search_resource("DeviceAssociation", {"subject": patient_ref})
             user_associations = association_bundle.get("total", 0)
 
             return {
                 "user_id": user_id,
                 "total_devices_in_system": total_devices,
                 "user_device_associations": user_associations,
-                "last_check": datetime.utcnow().isoformat()
+                "last_check": timezone.now().isoformat(),
             }
         except Exception as e:
             self.logger.error(f"Failed to get sync statistics for user {user_id}: {e}")
-            return {
-                "user_id": user_id,
-                "error": str(e),
-                "last_check": datetime.utcnow().isoformat()
-            }
+            return {"user_id": user_id, "error": str(e), "last_check": timezone.now().isoformat()}
 
 
 class MockDeviceSyncService(DeviceSyncService):
@@ -216,16 +199,9 @@ class MockDeviceSyncService(DeviceSyncService):
         self.published_devices.append(fhir_device)
         return fhir_device
 
-    def _publish_association(
-        self,
-        device: DeviceData,
-        patient_ref: str,
-        device_ref: str
-    ) -> dict:
+    def _publish_association(self, device: DeviceData, patient_ref: str, device_ref: str) -> dict:
         """Mock association publishing"""
-        fhir_association = self.association_transformer.transform(
-            device, patient_ref, device_ref
-        )
+        fhir_association = self.association_transformer.transform(device, patient_ref, device_ref)
         fhir_association["id"] = f"mock-association-{len(self.published_associations)}"
         self.published_associations.append(fhir_association)
         return fhir_association

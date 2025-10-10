@@ -1,21 +1,23 @@
 """
 Huey tasks for health data synchronization
 """
+
 import logging
 from datetime import datetime
 from typing import Any
 
 from huey import crontab
+
+from base.models import EHRUser, ProviderLink
 from open_health_exchange.settings import HUEY
 
+from .health_data_constants import (
+    DateRange,
+    HealthDataType,
+    Provider,
+)
 from .health_data_service import HealthDataSyncService
 from .health_sync_strategies import SyncStrategy, SyncStrategyFactory
-from .health_data_constants import (
-    Provider, HealthDataType, SyncTrigger, HealthSyncConfig,
-    AggregationLevel, SyncFrequency, DateRange
-)
-from base.models import EHRUser, ProviderLink
-
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ def sync_user_health_data_realtime(
     provider_name: str,
     data_types: list[str],
     trigger_type: str = "webhook",
-    date_range: dict[str, str] | None = None
+    date_range: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Real-time health data sync triggered by webhooks
@@ -46,7 +48,7 @@ def sync_user_health_data_realtime(
     try:
         # Validate inputs
         try:
-            user = EHRUser.objects.get(ehr_user_id=user_id)
+            EHRUser.objects.get(ehr_user_id=user_id)
             provider = Provider(provider_name)
             data_type_enums = [HealthDataType(dt) for dt in data_types]
         except EHRUser.DoesNotExist:
@@ -76,10 +78,7 @@ def sync_user_health_data_realtime(
 
         # Perform sync
         result = sync_service.sync_user_health_data(
-            user_id=user_id,
-            provider=provider,
-            data_types=data_type_enums,
-            sync_strategy=sync_strategy
+            user_id=user_id, provider=provider, data_types=data_type_enums, sync_strategy=sync_strategy
         )
 
         # Convert result to dictionary
@@ -94,7 +93,7 @@ def sync_user_health_data_realtime(
             "errors": result.errors,
             "success": result.success,
             "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms
+            "processing_time_ms": result.processing_time_ms,
         }
 
         logger.info(f"Real-time health data sync completed for user {user_id}: {result_dict}")
@@ -108,9 +107,7 @@ def sync_user_health_data_realtime(
 
 @HUEY.task(priority=3)  # Medium priority for scheduled sync
 def sync_user_health_data_incremental(
-    user_id: str,
-    provider_name: str,
-    data_types: list[str] | None = None
+    user_id: str, provider_name: str, data_types: list[str] | None = None
 ) -> dict[str, Any]:
     """
     Incremental health data sync for regular updates
@@ -159,10 +156,7 @@ def sync_user_health_data_incremental(
 
         # Perform sync
         result = sync_service.sync_user_health_data(
-            user_id=user_id,
-            provider=provider,
-            data_types=data_type_enums,
-            sync_strategy=sync_strategy
+            user_id=user_id, provider=provider, data_types=data_type_enums, sync_strategy=sync_strategy
         )
 
         # Update provider link with sync information
@@ -183,7 +177,7 @@ def sync_user_health_data_incremental(
             "errors": result.errors,
             "success": result.success,
             "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms
+            "processing_time_ms": result.processing_time_ms,
         }
 
         logger.info(f"Incremental health data sync completed for user {user_id}: {result_dict}")
@@ -197,10 +191,7 @@ def sync_user_health_data_incremental(
 
 @HUEY.task(priority=4)  # Low priority for initial sync
 def sync_user_health_data_initial(
-    user_id: str,
-    provider_name: str,
-    lookback_days: int = 30,
-    data_types: list[str] | None = None
+    user_id: str, provider_name: str, lookback_days: int = 30, data_types: list[str] | None = None
 ) -> dict[str, Any]:
     """
     Initial health data sync for new users
@@ -214,7 +205,9 @@ def sync_user_health_data_initial(
     Returns:
         Sync result dictionary
     """
-    logger.info(f"Starting initial health data sync for user {user_id} with provider {provider_name} ({lookback_days} days)")
+    logger.info(
+        f"Starting initial health data sync for user {user_id} with provider {provider_name} ({lookback_days} days)"
+    )
 
     try:
         # Validate inputs
@@ -250,10 +243,7 @@ def sync_user_health_data_initial(
 
         # Perform sync
         result = sync_service.sync_user_health_data(
-            user_id=user_id,
-            provider=provider,
-            data_types=data_type_enums,
-            sync_strategy=sync_strategy
+            user_id=user_id, provider=provider, data_types=data_type_enums, sync_strategy=sync_strategy
         )
 
         # Update provider link with sync information
@@ -274,7 +264,7 @@ def sync_user_health_data_initial(
             "errors": result.errors,
             "success": result.success,
             "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms
+            "processing_time_ms": result.processing_time_ms,
         }
 
         logger.info(f"Initial health data sync completed for user {user_id}: {result_dict}")
@@ -295,9 +285,7 @@ def nightly_health_data_sync() -> list[dict]:
     logger.info("Starting nightly health data synchronization")
 
     # Get all active provider links
-    active_links = ProviderLink.objects.filter(
-        provider__active=True
-    ).select_related("user", "provider")
+    active_links = ProviderLink.objects.filter(provider__active=True).select_related("user", "provider")
 
     sync_results = []
 
@@ -317,59 +305,56 @@ def nightly_health_data_sync() -> list[dict]:
             result = sync_user_health_data_incremental.delay(
                 user_id=link.user.ehr_user_id,
                 provider_name=link.provider.provider_type,
-                data_types=["heart_rate", "steps"]  # Default types for Phase 1
+                data_types=["heart_rate", "steps"],  # Default types for Phase 1
             )
 
-            sync_results.append({
-                "user_id": link.user.ehr_user_id,
-                "provider": link.provider.provider_type,
-                "task_id": result.id,
-                "status": "queued"
-            })
+            sync_results.append(
+                {
+                    "user_id": link.user.ehr_user_id,
+                    "provider": link.provider.provider_type,
+                    "task_id": result.id,
+                    "status": "queued",
+                }
+            )
 
             logger.debug(
-                f"Queued nightly health data sync for user {link.user.ehr_user_id} "
-                f"with {link.provider.provider_type}"
+                f"Queued nightly health data sync for user {link.user.ehr_user_id} with {link.provider.provider_type}"
             )
 
         except Exception as e:
             error_result = {
                 "error": f"Error processing provider link {link.id}: {e}",
                 "success": False,
-                "link_id": link.id
+                "link_id": link.id,
             }
             sync_results.append(error_result)
             logger.error(f"Error processing provider link {link.id}: {e}")
 
-    logger.info(
-        f"Nightly health data sync completed. "
-        f"Queued {len(sync_results)} sync tasks"
-    )
+    logger.info(f"Nightly health data sync completed. Queued {len(sync_results)} sync tasks")
     return sync_results
 
 
 def _update_provider_link_health_sync_info(user: EHRUser, provider: Provider, result) -> None:
     """Update provider link with health data sync information"""
     try:
-        provider_link = ProviderLink.objects.filter(
-            user=user,
-            provider__provider_type=provider.value
-        ).first()
+        provider_link = ProviderLink.objects.filter(user=user, provider__provider_type=provider.value).first()
 
         if provider_link:
             # Update extra_data with health sync information
             if not provider_link.extra_data:
                 provider_link.extra_data = {}
 
-            provider_link.extra_data.update({
-                "last_health_data_sync": result.sync_timestamp,
-                "last_health_sync_records_fetched": result.records_fetched,
-                "last_health_sync_records_transformed": result.records_transformed,
-                "last_health_sync_fhir_resources_created": result.fhir_resources_created,
-                "last_health_sync_errors": len(result.errors),
-                "last_health_sync_success": result.success,
-                "last_health_sync_processing_time_ms": result.processing_time_ms
-            })
+            provider_link.extra_data.update(
+                {
+                    "last_health_data_sync": result.sync_timestamp,
+                    "last_health_sync_records_fetched": result.records_fetched,
+                    "last_health_sync_records_transformed": result.records_transformed,
+                    "last_health_sync_fhir_resources_created": result.fhir_resources_created,
+                    "last_health_sync_errors": len(result.errors),
+                    "last_health_sync_success": result.success,
+                    "last_health_sync_processing_time_ms": result.processing_time_ms,
+                }
+            )
             provider_link.save()
             logger.debug(f"Updated provider link {provider_link.id} with health sync information")
 

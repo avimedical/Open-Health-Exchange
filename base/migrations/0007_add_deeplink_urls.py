@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("base", "0002_alter_provider_credentials_squashed_0006_merge_20250924_1242"),
     ]

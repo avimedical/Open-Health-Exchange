@@ -1,5 +1,5 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.db import models
 
 
 class EHRUser(AbstractUser):
@@ -25,12 +25,26 @@ class Provider(models.Model):
     provider_type: str = models.CharField(max_length=50, choices=PROVIDER_CHOICES, default="withings")  # type: ignore[assignment]
     active: bool = models.BooleanField(default=False)  # type: ignore[assignment]
     credentials = models.JSONField(null=True, blank=True)
-    default_data_types: list = models.JSONField(default=list, help_text="Default data types for health sync (empty = use provider config defaults)")  # type: ignore[assignment]
+    default_data_types: list = models.JSONField(
+        default=list, help_text="Default data types for health sync (empty = use provider config defaults)"
+    )  # type: ignore[assignment]
     excluded_data_types: list = models.JSONField(default=list, help_text="Data types to exclude from sync (opt-out)")  # type: ignore[assignment]
     supports_webhooks: bool = models.BooleanField(default=True, help_text="Provider supports webhook subscriptions")  # type: ignore[assignment]
-    webhook_enabled: bool = models.BooleanField(default=True, help_text="Enable webhook subscriptions for this provider")  # type: ignore[assignment]
-    success_deeplink_url: str = models.URLField(max_length=500, blank=True, null=True, help_text="Optional deeplink URL for mobile app success redirect (e.g., myapp://oauth/success/withings/)")  # type: ignore[assignment]
-    error_deeplink_url: str = models.URLField(max_length=500, blank=True, null=True, help_text="Optional deeplink URL for mobile app error redirect (e.g., myapp://oauth/error/withings/)")  # type: ignore[assignment]
+    webhook_enabled: bool = models.BooleanField(
+        default=True, help_text="Enable webhook subscriptions for this provider"
+    )  # type: ignore[assignment]
+    success_deeplink_url: str = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Optional deeplink URL for mobile app success redirect (e.g., myapp://oauth/success/withings/)",
+    )  # type: ignore[assignment]
+    error_deeplink_url: str = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Optional deeplink URL for mobile app error redirect (e.g., myapp://oauth/error/withings/)",
+    )  # type: ignore[assignment]
 
     def __str__(self):
         return f"{self.name}"
@@ -42,7 +56,8 @@ class Provider(models.Model):
         This is the complete list of what CAN be synchronized.
         Returns empty list if provider type is invalid.
         """
-        from ingestors.provider_mappings import get_supported_data_types, Provider as ProviderEnum
+        from ingestors.provider_mappings import Provider as ProviderEnum
+        from ingestors.provider_mappings import get_supported_data_types
 
         try:
             # Provider enum values are uppercase (WITHINGS, FITBIT)
@@ -95,7 +110,9 @@ class ProviderLink(models.Model):
     provider: Provider = models.ForeignKey(Provider, on_delete=models.CASCADE)  # type: ignore[assignment]
     user: EHRUser = models.ForeignKey(EHRUser, on_delete=models.CASCADE)  # type: ignore[assignment]
     extra_data = models.JSONField(null=True, blank=True)
-    linked_at: models.DateTimeField = models.DateTimeField(auto_now_add=True, help_text="Timestamp when the provider link was created")
+    linked_at: models.DateTimeField = models.DateTimeField(
+        auto_now_add=True, help_text="Timestamp when the provider link was created"
+    )
 
     class Meta:
         unique_together = ("provider", "user")

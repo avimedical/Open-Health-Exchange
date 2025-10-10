@@ -11,19 +11,18 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import os
-import dotenv
-import dj_database_url
-import redis
-from huey import PriorityRedisExpireHuey
 from pathlib import Path
 from urllib.parse import urlparse
 
+import dj_database_url
+import dotenv
+import redis
+from huey import PriorityRedisExpireHuey
 
 dotenv.load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -78,9 +77,7 @@ ROOT_URLCONF = "open_health_exchange.urls"
 
 REST_FRAMEWORK = {
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer"
-    ],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "mozilla_django_oidc.contrib.drf.OIDCAuthentication",
         "rest_framework.authentication.TokenAuthentication",
@@ -145,9 +142,19 @@ SOCIAL_AUTH_WITHINGS_SECRET = os.environ.get("WITHINGS_CLIENT_SECRET", "123456")
 
 SOCIAL_AUTH_FITBIT_KEY = os.environ.get("FITBIT_CLIENT_ID")
 SOCIAL_AUTH_FITBIT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
-SOCIAL_AUTH_FITBIT_SCOPE = ["activity", "heartrate", "location", "nutrition", "profile", "settings", "sleep", "social", "weight"]
+SOCIAL_AUTH_FITBIT_SCOPE = [
+    "activity",
+    "heartrate",
+    "location",
+    "nutrition",
+    "profile",
+    "settings",
+    "sleep",
+    "social",
+    "weight",
+]
 
-SOCIAL_AUTH_USER_MODEL = 'base.EHRUser'  # Tell python-social-auth to use custom user model
+SOCIAL_AUTH_USER_MODEL = "base.EHRUser"  # Tell python-social-auth to use custom user model
 
 LOGIN_REDIRECT_URL = "/api/base/link/success/"  # Redirect URL after successful provider linking
 LOGIN_ERROR_URL = "/api/base/link/error/"  # Redirect URL after provider linking error
@@ -195,67 +202,70 @@ FHIR_AUTH_TOKEN_VALUE = os.environ.get("FHIR_AUTH_TOKEN_VALUE", "")
 
 # Device Mapping Service Configuration
 DEVICE_MAPPING = {
-    'CACHE_TTL': int(os.environ.get("DEVICE_CACHE_TTL", "86400")),  # 24 hours default
-    'NEGATIVE_CACHE_TTL': int(os.environ.get("DEVICE_NEGATIVE_CACHE_TTL", "3600")),  # 1 hour default
-    'CACHE_PREFIX': 'device_mapping',
-    'IDENTIFIER_SYSTEMS': {
-        'fitbit': 'https://api.fitbit.com/device-id',
-        'withings': 'https://api.withings.com/device-id',
+    "CACHE_TTL": int(os.environ.get("DEVICE_CACHE_TTL", "86400")),  # 24 hours default
+    "NEGATIVE_CACHE_TTL": int(os.environ.get("DEVICE_NEGATIVE_CACHE_TTL", "3600")),  # 1 hour default
+    "CACHE_PREFIX": "device_mapping",
+    "IDENTIFIER_SYSTEMS": {
+        "fitbit": "https://api.fitbit.com/device-id",
+        "withings": "https://api.withings.com/device-id",
     },
-    'BATCH_SIZE': int(os.environ.get("DEVICE_BATCH_SIZE", "50")),  # Max devices per batch
+    "BATCH_SIZE": int(os.environ.get("DEVICE_BATCH_SIZE", "50")),  # Max devices per batch
 }
 
 # API Client Configuration
 API_CLIENT_CONFIG = {
-    'MAX_RETRIES': int(os.environ.get("API_MAX_RETRIES", "3")),
-    'BACKOFF_FACTOR': float(os.environ.get("API_BACKOFF_FACTOR", "1.0")),
-    'TIMEOUT': int(os.environ.get("API_TIMEOUT", "30")),
-    'RATE_LIMIT_WINDOW': int(os.environ.get("API_RATE_LIMIT_WINDOW", "60")),  # seconds
-    'MAX_REQUESTS_PER_WINDOW': int(os.environ.get("API_MAX_REQUESTS_PER_WINDOW", "300")),
-    'ENDPOINTS': {
-        'withings': {
-            'base_url': 'https://wbsapi.withings.net',
-            'token_url': 'https://wbsapi.withings.net/v2/oauth2',
-            'measure_types': {
-                'weight': 1, 'height': 4, 'fat_free_mass': 5, 'fat_ratio': 6,
-                'fat_mass_weight': 8, 'diastolic_bp': 9, 'systolic_bp': 10,
-                'heart_rate': 11, 'temperature': 12, 'spo2': 54,
-                'body_temperature': 71, 'skin_temperature': 73
-            }
-        },
-        'fitbit': {
-            'device_types': ['tracker', 'watch', 'scale', 'aria'],
-            'source_mapping': {
-                'Aria': 'device', 'AriaAir': 'device', 'Withings': 'device',
-                'API': 'user'
+    "MAX_RETRIES": int(os.environ.get("API_MAX_RETRIES", "3")),
+    "BACKOFF_FACTOR": float(os.environ.get("API_BACKOFF_FACTOR", "1.0")),
+    "TIMEOUT": int(os.environ.get("API_TIMEOUT", "30")),
+    "RATE_LIMIT_WINDOW": int(os.environ.get("API_RATE_LIMIT_WINDOW", "60")),  # seconds
+    "MAX_REQUESTS_PER_WINDOW": int(os.environ.get("API_MAX_REQUESTS_PER_WINDOW", "300")),
+    "ENDPOINTS": {
+        "withings": {
+            "base_url": "https://wbsapi.withings.net",
+            "token_url": "https://wbsapi.withings.net/v2/oauth2",
+            "measure_types": {
+                "weight": 1,
+                "height": 4,
+                "fat_free_mass": 5,
+                "fat_ratio": 6,
+                "fat_mass_weight": 8,
+                "diastolic_bp": 9,
+                "systolic_bp": 10,
+                "heart_rate": 11,
+                "temperature": 12,
+                "spo2": 54,
+                "body_temperature": 71,
+                "skin_temperature": 73,
             },
-            'logtype_mapping': {
-                'auto_detected': 'device', 'manual': 'user'
-            }
-        }
-    },
-    'DATA_TYPE_ENDPOINTS': {
-        'withings': {
-            'heart_rate': '/v2/measure',
-            'activity': '/v2/measure',
-            'weight': '/v2/measure',
-            'sleep': '/v2/sleep',
-            'blood_pressure': '/v2/measure',
-            'ecg': '/v2/heart'  # ECG uses Heart v2 API, not measure endpoint
         },
-        'fitbit': {
-            'heart_rate': 'activities/heart',
-            'activity': 'activities/steps',
-            'weight': 'body/weight',
-            'sleep': 'sleep',
-            'ecg': '/1/user/-/ecg/list.json',
-            'hrv': '/1/user/-/hrv/date/{date}/all.json'
-        }
+        "fitbit": {
+            "device_types": ["tracker", "watch", "scale", "aria"],
+            "source_mapping": {"Aria": "device", "AriaAir": "device", "Withings": "device", "API": "user"},
+            "logtype_mapping": {"auto_detected": "device", "manual": "user"},
+        },
     },
-    'SUPPORTED_DATA_TYPES': {
-        'withings': ['heart_rate', 'steps', 'weight', 'blood_pressure', 'ecg'],
-        'fitbit': ['heart_rate', 'steps', 'weight', 'sleep', 'ecg', 'rr_intervals', 'hrv']
-    }
+    "DATA_TYPE_ENDPOINTS": {
+        "withings": {
+            "heart_rate": "/v2/measure",
+            "activity": "/v2/measure",
+            "weight": "/v2/measure",
+            "sleep": "/v2/sleep",
+            "blood_pressure": "/v2/measure",
+            "ecg": "/v2/heart",  # ECG uses Heart v2 API, not measure endpoint
+        },
+        "fitbit": {
+            "heart_rate": "activities/heart",
+            "activity": "activities/steps",
+            "weight": "body/weight",
+            "sleep": "sleep",
+            "ecg": "/1/user/-/ecg/list.json",
+            "hrv": "/1/user/-/hrv/date/{date}/all.json",
+        },
+    },
+    "SUPPORTED_DATA_TYPES": {
+        "withings": ["heart_rate", "steps", "weight", "blood_pressure", "ecg"],
+        "fitbit": ["heart_rate", "steps", "weight", "sleep", "ecg", "rr_intervals", "hrv"],
+    },
 }
 
 # Disable new user creation - we only want to link accounts
@@ -385,11 +395,11 @@ redis_url = urlparse(REDIS_URL)
 
 # Redis 8 compatible connection pool
 redis_pool = redis.ConnectionPool(
-    host=redis_url.hostname or 'localhost',
+    host=redis_url.hostname or "localhost",
     port=redis_url.port or 6379,
-    db=int(redis_url.path.lstrip('/')) if redis_url.path else 0,
+    db=int(redis_url.path.lstrip("/")) if redis_url.path else 0,
     password=redis_url.password,
-    username=redis_url.username or 'default',
+    username=redis_url.username or "default",
     max_connections=20,
     retry_on_timeout=True,
     socket_connect_timeout=15,
@@ -399,14 +409,14 @@ redis_pool = redis.ConnectionPool(
     socket_keepalive_options={},
     decode_responses=False,
     retry_on_error=[redis.ConnectionError, redis.TimeoutError],
-    connection_class=redis.Connection
+    connection_class=redis.Connection,
 )
 
 HUEY = PriorityRedisExpireHuey(
-    'open-health-exchange',
+    "open-health-exchange",
     connection_pool=redis_pool,
     expire_time=259200,  # 72 hours
-    utc=True
+    utc=True,
 )
 
 # Use different DB (1) for cache to avoid conflicts with Huey (DB 0)
@@ -420,8 +430,8 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "CONNECTION_POOL_KWARGS": {
                 "decode_responses": True,
-            }
-        }
+            },
+        },
     }
 }
 
@@ -439,86 +449,92 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # FHIR Client Configuration
 FHIR_CLIENT_CONFIG = {
-    'TIMEOUT': int(os.environ.get("FHIR_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
-    'BATCH_SIZE': int(os.environ.get("FHIR_BATCH_SIZE", "100")),  # Standard FHIR batch size
-    'MAX_RETRIES': int(os.environ.get("FHIR_MAX_RETRIES", "3")),
-    'BACKOFF_FACTOR': float(os.environ.get("FHIR_BACKOFF_FACTOR", "1.0")),
+    "TIMEOUT": int(os.environ.get("FHIR_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
+    "BATCH_SIZE": int(os.environ.get("FHIR_BATCH_SIZE", "100")),  # Standard FHIR batch size
+    "MAX_RETRIES": int(os.environ.get("FHIR_MAX_RETRIES", "3")),
+    "BACKOFF_FACTOR": float(os.environ.get("FHIR_BACKOFF_FACTOR", "1.0")),
 }
 
 # Webhook Configuration
 WEBHOOK_CONFIG = {
-    'TIMEOUT': int(os.environ.get("WEBHOOK_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
-    'CACHE_TIMEOUT': int(os.environ.get("WEBHOOK_CACHE_TIMEOUT", "60")),  # Health check cache
-    'MAX_RETRIES': int(os.environ.get("WEBHOOK_MAX_RETRIES", "3")),
+    "TIMEOUT": int(os.environ.get("WEBHOOK_TIMEOUT", "30")),  # Eliminates 5 hardcoded timeout=30
+    "CACHE_TIMEOUT": int(os.environ.get("WEBHOOK_CACHE_TIMEOUT", "60")),  # Health check cache
+    "MAX_RETRIES": int(os.environ.get("WEBHOOK_MAX_RETRIES", "3")),
 }
 
 # Circuit Breaker Configuration
 CIRCUIT_BREAKER_CONFIG = {
-    'TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_TIMEOUT", "60.0")),  # Eliminates 3 hardcoded timeout=60.0
-    'FAILURE_THRESHOLD': int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
-    'FHIR_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
-    'WEBHOOK_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
-    'PROVIDER_TIMEOUT': float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
+    "TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_TIMEOUT", "60.0")),  # Eliminates 3 hardcoded timeout=60.0
+    "FAILURE_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
+    "FHIR_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
+    "WEBHOOK_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
+    "PROVIDER_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
 }
 
 # Health Data Processing Configuration
 HEALTH_DATA_CONFIG = {
-    'BATCH_SIZES': {
-        'PUBLISHER': int(os.environ.get("HEALTH_DATA_PUBLISH_BATCH_SIZE", "100")),  # Eliminates hardcoded batch_size=100
-        'PROCESSOR': int(os.environ.get("HEALTH_DATA_PROCESS_BATCH_SIZE", "500")),  # Eliminates hardcoded batch_size=500
-        'INITIAL_SYNC': int(os.environ.get("HEALTH_DATA_INITIAL_BATCH_SIZE", "1000")),  # Eliminates hardcoded batch_size=1000
-        'TEST': int(os.environ.get("HEALTH_DATA_TEST_BATCH_SIZE", "10")),  # Test environments
+    "BATCH_SIZES": {
+        "PUBLISHER": int(
+            os.environ.get("HEALTH_DATA_PUBLISH_BATCH_SIZE", "100")
+        ),  # Eliminates hardcoded batch_size=100
+        "PROCESSOR": int(
+            os.environ.get("HEALTH_DATA_PROCESS_BATCH_SIZE", "500")
+        ),  # Eliminates hardcoded batch_size=500
+        "INITIAL_SYNC": int(
+            os.environ.get("HEALTH_DATA_INITIAL_BATCH_SIZE", "1000")
+        ),  # Eliminates hardcoded batch_size=1000
+        "TEST": int(os.environ.get("HEALTH_DATA_TEST_BATCH_SIZE", "10")),  # Test environments
     },
-    'LOOKBACK_DAYS': int(os.environ.get("HEALTH_DATA_LOOKBACK_DAYS", "30")),  # Eliminates hardcoded 30 days
-    'FIELD_LENGTHS': {
-        'EHR_USER_ID': int(os.environ.get("EHR_USER_ID_MAX_LENGTH", "100")),  # Eliminates hardcoded max_length=100
-        'EHR_USER_ID_MIN': int(os.environ.get("EHR_USER_ID_MIN_LENGTH", "3")),  # Eliminates hardcoded min 3 chars
-    }
+    "LOOKBACK_DAYS": int(os.environ.get("HEALTH_DATA_LOOKBACK_DAYS", "30")),  # Eliminates hardcoded 30 days
+    "FIELD_LENGTHS": {
+        "EHR_USER_ID": int(os.environ.get("EHR_USER_ID_MAX_LENGTH", "100")),  # Eliminates hardcoded max_length=100
+        "EHR_USER_ID_MIN": int(os.environ.get("EHR_USER_ID_MIN_LENGTH", "3")),  # Eliminates hardcoded min 3 chars
+    },
 }
 
 # Cache Timeout Configuration
 CACHE_TIMEOUTS = {
-    'DEVICE_CACHE': int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
-    'ASSOCIATION_CACHE': int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
-    'WEBHOOK_HEALTH': int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
+    "DEVICE_CACHE": int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
+    "ASSOCIATION_CACHE": int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
+    "WEBHOOK_HEALTH": int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
 }
 
 # Huey Task Configuration
 HUEY_TASK_CONFIG = {
-    'DEFAULT_TIMEOUT': int(os.environ.get("HUEY_DEFAULT_TIMEOUT", "3600")),  # Eliminates hardcoded timeout=3600
-    'HEALTH_SYNC_TIMEOUT': int(os.environ.get("HUEY_HEALTH_SYNC_TIMEOUT", "3600")),
-    'DEVICE_SYNC_TIMEOUT': int(os.environ.get("HUEY_DEVICE_SYNC_TIMEOUT", "1800")),
+    "DEFAULT_TIMEOUT": int(os.environ.get("HUEY_DEFAULT_TIMEOUT", "3600")),  # Eliminates hardcoded timeout=3600
+    "HEALTH_SYNC_TIMEOUT": int(os.environ.get("HUEY_HEALTH_SYNC_TIMEOUT", "3600")),
+    "DEVICE_SYNC_TIMEOUT": int(os.environ.get("HUEY_DEVICE_SYNC_TIMEOUT", "1800")),
 }
 
 # System URLs Configuration - Eliminates hardcoded URL patterns
 SYSTEM_URLS = {
-    'PROVIDER_BASE': "https://api.{provider}.com",  # Template for provider URLs
-    'OPEN_HEALTH_EXCHANGE_BASE': "https://open-health-exchange.com",
-    'FHIR_SYSTEMS': {
-        'SNOMED': "http://snomed.info/sct",
-        'LOINC': "http://loinc.org",
-        'UCUM': "http://unitsofmeasure.org",
-        'OBSERVATION_CATEGORY': "http://terminology.hl7.org/CodeSystem/observation-category",
-        'OBSERVATION_VALUE': "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
-        'DEVICE_VERSION_TYPE': "http://terminology.hl7.org/CodeSystem/device-version-type",
-        'DEVICE_PROPERTY_TYPE': "http://terminology.hl7.org/CodeSystem/device-property-type",
-        'DEVICE_ASSOCIATION_CATEGORY': "http://hl7.org/fhir/device-association-category",
-        'DEVICE_ASSOCIATION_STATUS': "http://hl7.org/fhir/device-association-status",
-        'DEVICE_ASSOCIATION_OPERATION_STATUS': "http://hl7.org/fhir/device-association-operation-status",
-    }
+    "PROVIDER_BASE": "https://api.{provider}.com",  # Template for provider URLs
+    "OPEN_HEALTH_EXCHANGE_BASE": "https://open-health-exchange.com",
+    "FHIR_SYSTEMS": {
+        "SNOMED": "http://snomed.info/sct",
+        "LOINC": "http://loinc.org",
+        "UCUM": "http://unitsofmeasure.org",
+        "OBSERVATION_CATEGORY": "http://terminology.hl7.org/CodeSystem/observation-category",
+        "OBSERVATION_VALUE": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "DEVICE_VERSION_TYPE": "http://terminology.hl7.org/CodeSystem/device-version-type",
+        "DEVICE_PROPERTY_TYPE": "http://terminology.hl7.org/CodeSystem/device-property-type",
+        "DEVICE_ASSOCIATION_CATEGORY": "http://hl7.org/fhir/device-association-category",
+        "DEVICE_ASSOCIATION_STATUS": "http://hl7.org/fhir/device-association-status",
+        "DEVICE_ASSOCIATION_OPERATION_STATUS": "http://hl7.org/fhir/device-association-operation-status",
+    },
 }
 
 # OAuth Provider URLs - Eliminates hardcoded OAuth endpoints
 OAUTH_PROVIDER_URLS = {
-    'WITHINGS': {
-        'AUTHORIZATION_URL': "https://account.withings.com/oauth2_user/authorize2",
-        'ACCESS_TOKEN_URL': "https://wbsapi.withings.net/v2/oauth2",
-        'API_BASE': "https://wbsapi.withings.net",
+    "WITHINGS": {
+        "AUTHORIZATION_URL": "https://account.withings.com/oauth2_user/authorize2",
+        "ACCESS_TOKEN_URL": "https://wbsapi.withings.net/v2/oauth2",
+        "API_BASE": "https://wbsapi.withings.net",
     },
-    'FITBIT': {
-        'AUTHORIZATION_URL': "https://www.fitbit.com/oauth2/authorize",
-        'ACCESS_TOKEN_URL': "https://api.fitbit.com/oauth2/token",
-        'API_BASE': "https://api.fitbit.com",
-        'PROFILE_URL': "https://api.fitbit.com/1/user/-/profile.json",
-    }
+    "FITBIT": {
+        "AUTHORIZATION_URL": "https://www.fitbit.com/oauth2/authorize",
+        "ACCESS_TOKEN_URL": "https://api.fitbit.com/oauth2/token",
+        "API_BASE": "https://api.fitbit.com",
+        "PROFILE_URL": "https://api.fitbit.com/1/user/-/profile.json",
+    },
 }

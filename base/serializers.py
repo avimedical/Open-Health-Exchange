@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from base.models import Provider, ProviderLink, EHRUser
+
+from base.models import Provider, ProviderLink
 
 
 # Unified validation methods and field definitions
@@ -7,7 +8,7 @@ class BaseHealthDataSerializer(serializers.Serializer):
     """Base serializer with common validation methods and field definitions"""
 
     # Common field definitions
-    PROVIDER_CHOICES = ['withings', 'fitbit']
+    PROVIDER_CHOICES = ["withings", "fitbit"]
 
     @staticmethod
     def get_provider_field():
@@ -28,7 +29,8 @@ class BaseHealthDataSerializer(serializers.Serializer):
     def validate_ehr_user_id(value):
         """Unified EHR user ID validation"""
         import re
-        if not re.match(r'^[a-zA-Z0-9_-]{3,100}$', value):
+
+        if not re.match(r"^[a-zA-Z0-9_-]{3,100}$", value):
             raise serializers.ValidationError(
                 "EHR user ID must be 3-100 characters, alphanumeric, hyphens, and underscores only"
             )
@@ -40,22 +42,24 @@ class ProviderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Provider
-        fields = ['id', 'name', 'provider_type', 'active']
-        read_only_fields = ['id']
+        fields = ["id", "name", "provider_type", "active"]
+        read_only_fields = ["id"]
 
 
 class ProviderLinkSerializer(serializers.ModelSerializer):
     """Serializer for ProviderLink model"""
+
     provider = ProviderSerializer(read_only=True)
 
     class Meta:
         model = ProviderLink
-        fields = ['id', 'provider', 'external_user_id', 'extra_data', 'linked_at']
-        read_only_fields = ['id', 'extra_data', 'linked_at']
+        fields = ["id", "provider", "external_user_id", "extra_data", "linked_at"]
+        read_only_fields = ["id", "extra_data", "linked_at"]
 
 
 class ProviderLinkingRequestSerializer(BaseHealthDataSerializer):
     """Serializer for provider linking requests"""
+
     ehr_user_id = BaseHealthDataSerializer.get_ehr_user_id_field()
     provider = BaseHealthDataSerializer.get_provider_field()
 
@@ -66,9 +70,10 @@ class ProviderLinkingRequestSerializer(BaseHealthDataSerializer):
 
 class SyncStatusSerializer(BaseHealthDataSerializer):
     """Serializer for sync status responses"""
+
     ehr_user_id = serializers.CharField()
     provider = serializers.CharField()
-    status = serializers.ChoiceField(choices=['pending', 'in_progress', 'completed', 'failed', 'no_recent_sync'])
+    status = serializers.ChoiceField(choices=["pending", "in_progress", "completed", "failed", "no_recent_sync"])
     last_sync = serializers.DateTimeField(required=False, allow_null=True)
     next_sync = serializers.DateTimeField(required=False, allow_null=True)
     records_synced = serializers.IntegerField(required=False, allow_null=True)
@@ -77,6 +82,7 @@ class SyncStatusSerializer(BaseHealthDataSerializer):
 
 class HealthDataCapabilitiesSerializer(serializers.Serializer):
     """Serializer for health data capabilities"""
+
     supported_providers = serializers.ListField(child=serializers.CharField())
     supported_data_types = serializers.ListField(child=serializers.CharField())
     webhook_endpoints = serializers.DictField()
@@ -85,6 +91,7 @@ class HealthDataCapabilitiesSerializer(serializers.Serializer):
 
 class DeviceSyncRequestSerializer(BaseHealthDataSerializer):
     """Serializer for device sync requests"""
+
     ehr_user_id = BaseHealthDataSerializer.get_ehr_user_id_field()
     provider = BaseHealthDataSerializer.get_provider_field()
 
@@ -95,6 +102,7 @@ class DeviceSyncRequestSerializer(BaseHealthDataSerializer):
 
 class DeviceSyncResultSerializer(BaseHealthDataSerializer):
     """Serializer for device sync results"""
+
     message = serializers.CharField()
     sync_id = serializers.CharField()
     ehr_user_id = serializers.CharField()

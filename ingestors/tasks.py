@@ -1,26 +1,23 @@
 """
 Huey tasks for device synchronization
 """
-import logging
-from datetime import datetime
 
+import logging
+
+from django.utils import timezone
 from huey import crontab
+
+from base.models import EHRUser, ProviderLink
 from open_health_exchange.settings import HUEY
 
-from .device_sync_service import DeviceSyncService
 from .constants import Provider
-from base.models import EHRUser, ProviderLink
-
+from .device_sync_service import DeviceSyncService
 
 logger = logging.getLogger(__name__)
 
 
 @HUEY.task(priority=1)  # High priority for real-time sync
-def sync_user_devices(
-    user_id: str,
-    provider_name: str,
-    patient_reference: str | None = None
-) -> dict:
+def sync_user_devices(user_id: str, provider_name: str, patient_reference: str | None = None) -> dict:
     """
     Device synchronization task
 
@@ -50,11 +47,7 @@ def sync_user_devices(
 
         # Perform sync
         sync_service = DeviceSyncService()
-        result = sync_service.sync_user_devices(
-            user_id=user_id,
-            provider=provider,
-            patient_reference=patient_reference
-        )
+        result = sync_service.sync_user_devices(user_id=user_id, provider=provider, patient_reference=patient_reference)
 
         # Update provider link with sync information
         try:
@@ -72,7 +65,7 @@ def sync_user_devices(
             "deactivated_associations": result.deactivated_associations,
             "errors": result.errors,
             "success": result.success,
-            "sync_timestamp": result.sync_timestamp
+            "sync_timestamp": result.sync_timestamp,
         }
 
         logger.info(f"Device sync completed for user {user_id}: {result_dict}")
@@ -102,9 +95,7 @@ def nightly_device_sync() -> list[dict]:
     logger.info("Starting nightly device synchronization")
 
     # Get all active provider links
-    active_links = ProviderLink.objects.filter(
-        provider__active=True
-    ).select_related("user", "provider")
+    active_links = ProviderLink.objects.filter(provider__active=True).select_related("user", "provider")
 
     sync_results = []
 
@@ -112,64 +103,54 @@ def nightly_device_sync() -> list[dict]:
         try:
             # Validate provider is supported
             if link.provider.provider_type not in [p.value for p in Provider]:
-                logger.warning(f"Unsupported provider {link.provider.provider_type} for link {link.id}")
+                logger.warning(f"Unsupported provider {link.provider.provider_type} for link {link.pk}")
                 continue
 
             # Check for access token
             if not link.extra_data or "access_token" not in link.extra_data:
-                logger.warning(f"No access token found for provider link {link.id}")
+                logger.warning(f"No access token found for provider link {link.pk}")
                 continue
 
             # Queue device sync task
-            result = sync_user_devices(
-                user_id=link.user.ehr_user_id,
-                provider_name=link.provider.provider_type
-            )
+            result = sync_user_devices(user_id=link.user.ehr_user_id, provider_name=link.provider.provider_type)
             sync_results.append(result)
 
-            logger.info(
-                f"Queued device sync for user {link.user.ehr_user_id} "
-                f"with {link.provider.provider_type}"
-            )
+            logger.info(f"Queued device sync for user {link.user.ehr_user_id} with {link.provider.provider_type}")
 
         except Exception as e:
             error_result = {
-                "error": f"Error processing provider link {link.id}: {e}",
+                "error": f"Error processing provider link {link.pk}: {e}",
                 "success": False,
-                "link_id": link.id
+                "link_id": link.pk,
             }
             sync_results.append(error_result)
-            logger.error(f"Error processing provider link {link.id}: {e}")
+            logger.error(f"Error processing provider link {link.pk}: {e}")
 
-    logger.info(
-        f"Nightly device sync completed. "
-        f"Processed {len(sync_results)} provider links"
-    )
+    logger.info(f"Nightly device sync completed. Processed {len(sync_results)} provider links")
     return sync_results
 
 
 def _update_provider_link_sync_info(user: EHRUser, provider: Provider, result) -> None:
     """Update provider link with sync information"""
     try:
-        provider_link = ProviderLink.objects.filter(
-            user=user,
-            provider__provider_type=provider.value
-        ).first()
+        provider_link = ProviderLink.objects.filter(user=user, provider__provider_type=provider.value).first()
 
         if provider_link:
             # Update extra_data with sync information
             if not provider_link.extra_data:
                 provider_link.extra_data = {}
 
-            provider_link.extra_data.update({
-                "last_device_sync": result.sync_timestamp,
-                "last_sync_device_count": result.processed_devices,
-                "last_sync_association_count": result.processed_associations,
-                "last_sync_errors": len(result.errors),
-                "last_sync_success": result.success
-            })
+            provider_link.extra_data.update(
+                {
+                    "last_device_sync": result.sync_timestamp,
+                    "last_sync_device_count": result.processed_devices,
+                    "last_sync_association_count": result.processed_associations,
+                    "last_sync_errors": len(result.errors),
+                    "last_sync_success": result.success,
+                }
+            )
             provider_link.save()
-            logger.info(f"Updated provider link {provider_link.id} with sync information")
+            logger.info(f"Updated provider link {provider_link.pk} with sync information")
 
     except Exception as e:
         logger.error(f"Failed to update provider link: {e}")
@@ -177,11 +158,7 @@ def _update_provider_link_sync_info(user: EHRUser, provider: Provider, result) -
 
 
 @HUEY.task(priority=3)  # Medium priority for subscription management
-def ensure_webhook_subscriptions(
-    user_id: str,
-    provider_name: str,
-    data_types: list[str] | None = None
-) -> dict:
+def ensure_webhook_subscriptions(user_id: str, provider_name: str, data_types: list[str] | None = None) -> dict:
     """
     Ensure webhook subscriptions exist for a user and provider
 
@@ -211,6 +188,7 @@ def ensure_webhook_subscriptions(
 
         # Get provider configuration
         from ingestors.constants import PROVIDER_CONFIGS
+
         provider_config = PROVIDER_CONFIGS.get(provider)
         if not provider_config:
             error_msg = f"No configuration found for provider {provider_name}"
@@ -219,11 +197,9 @@ def ensure_webhook_subscriptions(
 
         # Get configured data types from database provider settings
         from base.models import Provider as ProviderModel
+
         try:
-            provider_db = ProviderModel.objects.get(
-                provider_type=provider_name,
-                active=True
-            )
+            provider_db = ProviderModel.objects.get(provider_type=provider_name, active=True)
             effective_data_types = provider_db.get_effective_data_types() if not data_types else data_types
             webhook_enabled = provider_db.is_webhook_enabled()
         except ProviderModel.DoesNotExist:
@@ -243,6 +219,7 @@ def ensure_webhook_subscriptions(
 
         # Import subscription manager
         from webhooks.subscriptions import WebhookSubscriptionManager
+
         subscription_manager = WebhookSubscriptionManager()
 
         try:
@@ -260,43 +237,33 @@ def ensure_webhook_subscriptions(
             # Create subscriptions based on provider type
             if provider == Provider.WITHINGS:
                 # For Withings, collection types are appli IDs (integers)
-                subscription = subscription_manager.create_withings_subscription(
-                    user_id,
-                    data_types=data_types
-                )
+                subscription_manager.create_withings_subscription(user_id, data_types=data_types)
                 logger.info(f"Successfully ensured Withings subscriptions for user {user_id}")
 
             elif provider == Provider.FITBIT:
                 # For Fitbit, collection types are strings like "activities", "body"
-                subscription = subscription_manager.create_fitbit_subscription(
-                    user_id,
-                    collection_types=list(all_collection_types)
-                )
+                subscription_manager.create_fitbit_subscription(user_id, collection_types=list(all_collection_types))
                 logger.info(f"Successfully ensured Fitbit subscriptions for user {user_id}")
 
-            else:
-                error_msg = f"Webhook subscription creation not implemented for provider {provider_name}"
-                logger.error(error_msg)
-                return {"error": error_msg, "success": False}
+            # No else needed: unsupported providers are rejected earlier when constructing the Provider enum.
 
             # Update provider link with subscription info
             try:
-                provider_link = ProviderLink.objects.filter(
-                    user=user,
-                    provider__provider_type=provider.value
-                ).first()
+                provider_link = ProviderLink.objects.filter(user=user, provider__provider_type=provider.value).first()
 
                 if provider_link:
                     if not provider_link.extra_data:
                         provider_link.extra_data = {}
 
-                    provider_link.extra_data.update({
-                        "webhook_subscriptions_created": datetime.utcnow().isoformat(),
-                        "subscribed_data_types": data_types,
-                        "webhook_active": True
-                    })
+                    provider_link.extra_data.update(
+                        {
+                            "webhook_subscriptions_created": timezone.now().isoformat(),
+                            "subscribed_data_types": data_types,
+                            "webhook_active": True,
+                        }
+                    )
                     provider_link.save()
-                    logger.debug(f"Updated provider link {provider_link.id} with subscription info")
+                    logger.debug(f"Updated provider link {provider_link.pk} with subscription info")
 
             except Exception as e:
                 logger.warning(f"Could not update provider link with subscription info: {e}")
@@ -307,7 +274,7 @@ def ensure_webhook_subscriptions(
                 "data_types": data_types,
                 "subscription_active": True,
                 "success": True,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": timezone.now().isoformat(),
             }
 
         except Exception as e:
@@ -319,5 +286,3 @@ def ensure_webhook_subscriptions(
         error_msg = f"Unexpected error ensuring webhook subscriptions for user {user_id}: {e}"
         logger.error(error_msg)
         return {"error": error_msg, "success": False}
-
-

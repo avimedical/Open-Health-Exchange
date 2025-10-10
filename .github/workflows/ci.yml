@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, development, staging ]
 
 jobs:
   test:
@@ -41,7 +41,7 @@ jobs:
       - name: Install Poetry 2.2
         uses: snok/install-poetry@v1
         with:
-          version: 2.2.2
+          version: 2.2.1
           virtualenvs-create: false
           virtualenvs-in-project: false
 
@@ -49,9 +49,13 @@ jobs:
         run: |
           poetry install --no-interaction --no-ansi
 
-      - name: Lint
+      - name: Lint with Ruff
         run: |
-          poetry run flake8
+          poetry run ruff check .
+
+      - name: Check formatting with Ruff
+        run: |
+          poetry run ruff format --check .
 
       - name: Run tests
         env:

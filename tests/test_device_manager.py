@@ -1,20 +1,26 @@
 """
 Unit tests for the modern device manager
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from dataclasses import dataclass
 
+from dataclasses import dataclass
+from unittest.mock import Mock, patch
+
+import pytest
+
+from ingestors.constants import DeviceType, Provider
 from ingestors.device_manager import (
-    DeviceManager, DeviceManagerFactory, DeviceManagerError,
-    AuthenticationError, APIError, OAuthCredentials
+    AuthenticationError,
+    DeviceManager,
+    DeviceManagerError,
+    DeviceManagerFactory,
+    OAuthCredentials,
 )
-from ingestors.constants import Provider, DeviceType, DeviceData
 
 
 @dataclass
 class MockWithingsDevice:
     """Mock Withings device for testing"""
+
     deviceid: int
     type: str
     model: str
@@ -30,7 +36,7 @@ def mock_user_auth():
         "access_token": "test_access_token",
         "refresh_token": "test_refresh_token",
         "userid": "test_user_id",
-        "expires": 3600
+        "expires": 3600,
     }
     return mock
 
@@ -55,7 +61,7 @@ class TestDeviceManager:
         with pytest.raises(KeyError):
             DeviceManager("invalid_provider")
 
-    @patch('ingestors.device_manager.UserSocialAuth.objects.get')
+    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
     def test_get_user_credentials_success(self, mock_get, device_manager, mock_user_auth):
         """Test successful credential retrieval"""
         mock_get.return_value = mock_user_auth
@@ -67,16 +73,17 @@ class TestDeviceManager:
         assert credentials.user_id == "test_user_id"
         assert credentials.expires_in == 3600
 
-    @patch('ingestors.device_manager.UserSocialAuth.objects.get')
+    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
     def test_get_user_credentials_not_found(self, mock_get, device_manager):
         """Test credential retrieval when user not found"""
         from social_django.models import UserSocialAuth
+
         mock_get.side_effect = UserSocialAuth.DoesNotExist()
 
         with pytest.raises(AuthenticationError, match="No withings credentials"):
             device_manager._get_user_credentials("nonexistent_user")
 
-    @patch('ingestors.device_manager.UserSocialAuth.objects.get')
+    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
     def test_get_user_credentials_missing_token(self, mock_get, device_manager):
         """Test credential retrieval with missing access token"""
         mock_auth = Mock()
@@ -86,8 +93,8 @@ class TestDeviceManager:
         with pytest.raises(AuthenticationError, match="Missing credential field"):
             device_manager._get_user_credentials("test_user")
 
-    @patch('ingestors.device_manager.WithingsApiAdapter')
-    @patch.object(DeviceManager, '_get_user_credentials')
+    @patch("ingestors.device_manager.WithingsApiAdapter")
+    @patch.object(DeviceManager, "_get_user_credentials")
     def test_fetch_user_devices_success(self, mock_get_creds, mock_adapter, device_manager):
         """Test successful device fetching"""
         # Setup mocks
@@ -97,7 +104,7 @@ class TestDeviceManager:
 
         mock_devices = [
             MockWithingsDevice(123, "Scale", "Body+", "high"),
-            MockWithingsDevice(456, "Blood Pressure Monitor", "BPM Core", "low")
+            MockWithingsDevice(456, "Blood Pressure Monitor", "BPM Core", "low"),
         ]
         mock_client.fetch_devices.return_value = mock_devices
 
@@ -114,7 +121,7 @@ class TestDeviceManager:
         assert devices[1].device_type == DeviceType.BP_MONITOR
         assert devices[1].battery_level == 20  # "low" -> 20%
 
-    @patch.object(DeviceManager, '_get_user_credentials')
+    @patch.object(DeviceManager, "_get_user_credentials")
     def test_fetch_user_devices_auth_error(self, mock_get_creds, device_manager):
         """Test device fetching with authentication error"""
         mock_get_creds.side_effect = AuthenticationError("Invalid token")
@@ -124,12 +131,7 @@ class TestDeviceManager:
 
     def test_transform_withings_device(self, device_manager):
         """Test Withings device data transformation"""
-        mock_device = MockWithingsDevice(
-            deviceid=123,
-            type="Scale",
-            model="Body+",
-            battery="medium"
-        )
+        mock_device = MockWithingsDevice(deviceid=123, type="Scale", model="Body+", battery="medium")
 
         device_data = device_manager._transform_withings_device(mock_device)
 
@@ -151,7 +153,7 @@ class TestDeviceManager:
             client_secret_setting="FITBIT_SECRET",
             api_base_url="https://api.fitbit.com",
             device_endpoint="/devices",
-            device_types_map={"TRACKER": DeviceType.ACTIVITY_TRACKER}
+            device_types_map={"TRACKER": DeviceType.ACTIVITY_TRACKER},
         )
 
         fitbit_data = {
@@ -160,7 +162,7 @@ class TestDeviceManager:
             "deviceVersion": "Versa 3",
             "batteryLevel": "High",
             "lastSyncTime": "2023-01-01T10:00:00Z",
-            "version": "1.2.3"
+            "version": "1.2.3",
         }
 
         device_data = device_manager._transform_fitbit_device(fitbit_data)
@@ -222,10 +224,7 @@ class TestOAuthCredentials:
     def test_full_credentials(self):
         """Test creating credentials with all data"""
         creds = OAuthCredentials(
-            access_token="access_token",
-            refresh_token="refresh_token",
-            user_id="user123",
-            expires_in=3600
+            access_token="access_token", refresh_token="refresh_token", user_id="user123", expires_in=3600
         )
         assert creds.access_token == "access_token"
         assert creds.refresh_token == "refresh_token"
