@@ -676,9 +676,7 @@ class UnifiedHealthDataClient:
                                 )
                             if sleep_end:
                                 sleep_end = (
-                                    sleep_end.astimezone(UTC)
-                                    if sleep_end.tzinfo
-                                    else sleep_end.replace(tzinfo=UTC)
+                                    sleep_end.astimezone(UTC) if sleep_end.tzinfo else sleep_end.replace(tzinfo=UTC)
                                 )
                             if not sleep_start or not sleep_end:
                                 raise ValueError("Could not parse sleep times")

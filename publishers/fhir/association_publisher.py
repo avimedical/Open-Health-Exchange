@@ -51,9 +51,7 @@ class DeviceAssociationPublisher:
                 # Update existing association
                 association_resource = cast(
                     dict[str, Any],
-                    self.fhir_client.update_resource(
-                        "DeviceAssociation", existing_association["id"], fhir_association
-                    ),
+                    self.fhir_client.update_resource("DeviceAssociation", existing_association["id"], fhir_association),
                 )
                 logger.info(f"Updated device association {association_resource['id']}")
             else:
@@ -352,9 +350,7 @@ class DeviceAssociationPublisher:
                         start_date = dateparse.parse_datetime(period["start"])
                         if start_date:
                             start_date = (
-                                start_date.astimezone(UTC)
-                                if start_date.tzinfo
-                                else start_date.replace(tzinfo=UTC)
+                                start_date.astimezone(UTC) if start_date.tzinfo else start_date.replace(tzinfo=UTC)
                             )
                             if start_date >= thirty_days_ago:
                                 stats["recent_associations"] += 1
