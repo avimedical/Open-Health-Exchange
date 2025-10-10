@@ -13,7 +13,10 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 import dotenv
 import dj_database_url
+import redis
+from huey import PriorityRedisExpireHuey
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 dotenv.load_dotenv()
@@ -121,8 +124,8 @@ AUTH_USER_MODEL = "base.EHRUser"  # Custom user model for EHR users
 
 # CONFIGURATION FOR OAUTH2
 RS_URL = os.environ.get("RS_URL", "http://localhost:8000")
-OIDC_RP_CLIENT_ID = os.environ.get("RS_CLIENT_ID", "")
-OIDC_RP_CLIENT_SECRET = os.environ.get("RS_CLIENT_SECRET", "")
+OIDC_RP_CLIENT_ID = os.environ.get("RS_CLIENT_ID")
+OIDC_RP_CLIENT_SECRET = os.environ.get("RS_CLIENT_SECRET")
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{RS_URL}/oidc/authorize/"
 OIDC_OP_TOKEN_ENDPOINT = f"{RS_URL}/oidc/token/"
 OIDC_OP_USER_ENDPOINT = f"{RS_URL}/oidc/userinfo/"
@@ -377,10 +380,6 @@ USE_TZ = True
 
 # Huey settings with Redis connection pool
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-
-import redis
-from urllib.parse import urlparse
-from huey import PriorityRedisExpireHuey
 
 redis_url = urlparse(REDIS_URL)
 
