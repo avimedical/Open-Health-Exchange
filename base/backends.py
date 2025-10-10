@@ -1,12 +1,12 @@
 import logging
-import requests
 from typing import Any
+
+import requests
+from django.contrib.auth.models import Group
+from django.core.exceptions import SuspiciousOperation
+from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from social_core.backends.oauth import BaseOAuth2
 from social_core.exceptions import AuthStateMissing, AuthTokenError
-from django.core.exceptions import SuspiciousOperation
-from django.contrib.auth.models import Group
-from mozilla_django_oidc.auth import OIDCAuthenticationBackend
-
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,7 @@ class WithingsOAuth2(BaseOAuth2):
             raise AuthTokenError(self, error_message)
 
         return response_json.get("body", {})
+
     def refresh_token(self, token: str, *args, **kwargs) -> dict[str, Any]:
         """Refresh Withings access token using refresh token"""
         try:
@@ -161,7 +162,7 @@ class WithingsOAuth2(BaseOAuth2):
                     "client_secret": secret,
                     "refresh_token": token,
                 },
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
             if response.status_code != 200:
@@ -301,8 +302,8 @@ class FitbitOAuth2(BaseOAuth2):
         # Fitbit requires HTTP Basic Authentication for server-side apps
         # Authorization: Basic base64(client_id:client_secret)
         auth_string = f"{client_id}:{client_secret}"
-        auth_bytes = auth_string.encode('ascii')
-        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+        auth_bytes = auth_string.encode("ascii")
+        auth_b64 = base64.b64encode(auth_bytes).decode("ascii")
 
         data = {
             "grant_type": "authorization_code",
@@ -318,10 +319,7 @@ class FitbitOAuth2(BaseOAuth2):
             # Clear the code_verifier from session
             self.strategy.session_set("fitbit_code_verifier", None)
 
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Basic {auth_b64}"
-        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Basic {auth_b64}"}
 
         logger.info(f"Making Fitbit token request with client_id: {client_id[:8]}...")
 
@@ -362,7 +360,7 @@ class FitbitOAuth2(BaseOAuth2):
         # Clear state from session after validation
         self.strategy.session_set("fitbit_state", None)
         return request_state
-    
+
     def refresh_token(self, token: str, *args, **kwargs) -> dict[str, Any]:
         """Refresh Fitbit access token using refresh token"""
         try:
@@ -374,7 +372,7 @@ class FitbitOAuth2(BaseOAuth2):
                     "refresh_token": token,
                 },
                 auth=(key, secret),
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
             if response.status_code != 200:
@@ -405,7 +403,7 @@ class OidcAuthenticationBackend(OIDCAuthenticationBackend):
 
     def update_user(self, user, claims):
         user = super().update_user(user, claims)
-        # writes to db immediatly
+        # writes to db immediately
         user.groups.set([Group.objects.get_or_create(name=group)[0] for group in claims.get("groups", [])])
         return user
 

@@ -1,12 +1,13 @@
 """
 Unit tests for the modern device sync service
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
 
+from unittest.mock import Mock, patch
+
+import pytest
+
+from ingestors.constants import DeviceData, DeviceType, Provider
 from ingestors.device_sync_service import DeviceSyncService, MockDeviceSyncService, SyncResult
-from ingestors.constants import Provider, DeviceType, DeviceData
 from publishers.fhir.client import FHIRClient
 
 
@@ -35,7 +36,7 @@ def sample_devices():
             device_type=DeviceType.SCALE,
             manufacturer="Withings",
             model="Body+ Scale",
-            battery_level=80
+            battery_level=80,
         ),
         DeviceData(
             provider_device_id="device-2",
@@ -43,8 +44,8 @@ def sample_devices():
             device_type=DeviceType.BP_MONITOR,
             manufacturer="Withings",
             model="BPM Core",
-            battery_level=60
-        )
+            battery_level=60,
+        ),
     ]
 
 
@@ -79,7 +80,7 @@ class TestSyncResult:
             deactivated_associations=1,
             errors=errors,
             success=True,
-            sync_timestamp=timestamp
+            sync_timestamp=timestamp,
         )
 
         assert result.user_id == "test-user"
@@ -95,12 +96,7 @@ class TestSyncResult:
     def test_sync_result_post_init(self):
         """Test SyncResult post_init behavior"""
         # Test with None values
-        result = SyncResult(
-            user_id="test-user",
-            provider=Provider.WITHINGS,
-            errors=None,
-            sync_timestamp=None
-        )
+        result = SyncResult(user_id="test-user", provider=Provider.WITHINGS, errors=None, sync_timestamp=None)
 
         assert result.errors == []
         assert result.sync_timestamp is not None
@@ -111,7 +107,7 @@ class TestDeviceSyncService:
 
     def test_init_default_client(self):
         """Test service initialization with default FHIR client"""
-        with patch('ingestors.device_sync_service.FHIRClient') as mock_client_class:
+        with patch("ingestors.device_sync_service.FHIRClient") as mock_client_class:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
 
@@ -127,34 +123,20 @@ class TestDeviceSyncService:
 
         assert service.fhir_client == mock_fhir_client
 
-    @patch.object(DeviceSyncService, '_fetch_devices')
-    @patch.object(DeviceSyncService, '_publish_device')
-    @patch.object(DeviceSyncService, '_publish_association')
+    @patch.object(DeviceSyncService, "_fetch_devices")
+    @patch.object(DeviceSyncService, "_publish_device")
+    @patch.object(DeviceSyncService, "_publish_association")
     def test_sync_user_devices_success(
-        self,
-        mock_publish_association,
-        mock_publish_device,
-        mock_fetch_devices,
-        device_sync_service,
-        sample_devices
+        self, mock_publish_association, mock_publish_device, mock_fetch_devices, device_sync_service, sample_devices
     ):
         """Test successful device synchronization"""
         # Setup mocks
         mock_fetch_devices.return_value = sample_devices
-        mock_publish_device.side_effect = [
-            {"id": "device-fhir-1"},
-            {"id": "device-fhir-2"}
-        ]
-        mock_publish_association.side_effect = [
-            {"id": "association-fhir-1"},
-            {"id": "association-fhir-2"}
-        ]
+        mock_publish_device.side_effect = [{"id": "device-fhir-1"}, {"id": "device-fhir-2"}]
+        mock_publish_association.side_effect = [{"id": "association-fhir-1"}, {"id": "association-fhir-2"}]
 
         # Test
-        result = device_sync_service.sync_user_devices(
-            user_id="test-user",
-            provider=Provider.WITHINGS
-        )
+        result = device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
 
         # Assertions
         assert result.user_id == "test-user"
@@ -169,54 +151,38 @@ class TestDeviceSyncService:
         assert mock_publish_device.call_count == 2
         assert mock_publish_association.call_count == 2
 
-    @patch.object(DeviceSyncService, '_fetch_devices')
+    @patch.object(DeviceSyncService, "_fetch_devices")
     def test_sync_user_devices_no_devices(self, mock_fetch_devices, device_sync_service):
         """Test synchronization when no devices are found"""
         mock_fetch_devices.return_value = []
 
-        result = device_sync_service.sync_user_devices(
-            user_id="test-user",
-            provider=Provider.WITHINGS
-        )
+        result = device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.processed_devices == 0
         assert result.processed_associations == 0
         assert result.success is True
 
-    @patch.object(DeviceSyncService, '_fetch_devices')
+    @patch.object(DeviceSyncService, "_fetch_devices")
     def test_sync_user_devices_fetch_error(self, mock_fetch_devices, device_sync_service):
         """Test synchronization when device fetching fails"""
         mock_fetch_devices.side_effect = Exception("API Error")
 
-        result = device_sync_service.sync_user_devices(
-            user_id="test-user",
-            provider=Provider.WITHINGS
-        )
+        result = device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.success is False
         assert len(result.errors) == 1
         assert "API Error" in result.errors[0]
 
-    @patch.object(DeviceSyncService, '_fetch_devices')
-    @patch.object(DeviceSyncService, '_publish_device')
+    @patch.object(DeviceSyncService, "_fetch_devices")
+    @patch.object(DeviceSyncService, "_publish_device")
     def test_sync_user_devices_partial_failure(
-        self,
-        mock_publish_device,
-        mock_fetch_devices,
-        device_sync_service,
-        sample_devices
+        self, mock_publish_device, mock_fetch_devices, device_sync_service, sample_devices
     ):
         """Test synchronization with partial device failures"""
         mock_fetch_devices.return_value = sample_devices
-        mock_publish_device.side_effect = [
-            {"id": "device-fhir-1"},
-            Exception("FHIR Error")
-        ]
+        mock_publish_device.side_effect = [{"id": "device-fhir-1"}, Exception("FHIR Error")]
 
-        result = device_sync_service.sync_user_devices(
-            user_id="test-user",
-            provider=Provider.WITHINGS
-        )
+        result = device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.processed_devices == 1  # Only one device succeeded
         assert result.processed_associations == 1  # Only one association succeeded
@@ -225,31 +191,29 @@ class TestDeviceSyncService:
 
     def test_sync_user_devices_string_provider(self, device_sync_service):
         """Test synchronization with string provider name"""
-        with patch.object(device_sync_service, '_fetch_devices') as mock_fetch:
+        with patch.object(device_sync_service, "_fetch_devices") as mock_fetch:
             mock_fetch.return_value = []
 
             result = device_sync_service.sync_user_devices(
                 user_id="test-user",
-                provider="withings"  # String instead of enum
+                provider="withings",  # String instead of enum
             )
 
             assert result.provider == Provider.WITHINGS
 
     def test_sync_user_devices_custom_patient_reference(self, device_sync_service):
         """Test synchronization with custom patient reference"""
-        with patch.object(device_sync_service, '_fetch_devices') as mock_fetch:
+        with patch.object(device_sync_service, "_fetch_devices") as mock_fetch:
             mock_fetch.return_value = []
 
             result = device_sync_service.sync_user_devices(
-                user_id="test-user",
-                provider=Provider.WITHINGS,
-                patient_reference="Patient/custom-123"
+                user_id="test-user", provider=Provider.WITHINGS, patient_reference="Patient/custom-123"
             )
 
             # Patient reference should be passed to association publishing
             assert result.user_id == "test-user"
 
-    @patch('ingestors.device_sync_service.DeviceManagerFactory')
+    @patch("ingestors.device_sync_service.DeviceManagerFactory")
     def test_fetch_devices(self, mock_factory, device_sync_service, sample_devices):
         """Test device fetching"""
         mock_manager = Mock()
@@ -278,9 +242,7 @@ class TestDeviceSyncService:
         """Test association publishing"""
         device = sample_devices[0]
 
-        result = device_sync_service._publish_association(
-            device, "Patient/test-123", "Device/test-456"
-        )
+        result = device_sync_service._publish_association(device, "Patient/test-123", "Device/test-456")
 
         assert result["id"] == "test-resource-123"
         device_sync_service.fhir_client.create_resource.assert_called_once()
@@ -322,16 +284,13 @@ class TestMockDeviceSyncService:
         assert mock_service.published_devices == []
         assert mock_service.published_associations == []
 
-    @patch.object(MockDeviceSyncService, '_fetch_devices')
+    @patch.object(MockDeviceSyncService, "_fetch_devices")
     def test_mock_service_sync(self, mock_fetch_devices, sample_devices):
         """Test mock service synchronization"""
         mock_service = MockDeviceSyncService()
         mock_fetch_devices.return_value = sample_devices
 
-        result = mock_service.sync_user_devices(
-            user_id="test-user",
-            provider=Provider.WITHINGS
-        )
+        result = mock_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.processed_devices == 2
         assert result.processed_associations == 2
@@ -354,9 +313,7 @@ class TestMockDeviceSyncService:
         mock_service = MockDeviceSyncService()
         device = sample_devices[0]
 
-        result = mock_service._publish_association(
-            device, "Patient/test-123", "Device/test-456"
-        )
+        result = mock_service._publish_association(device, "Patient/test-123", "Device/test-456")
 
         assert result["id"] == "mock-association-0"
         assert result["resourceType"] == "DeviceAssociation"

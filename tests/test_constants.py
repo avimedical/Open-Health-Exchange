@@ -1,12 +1,10 @@
 """
 Unit tests for constants and enums
 """
+
 import pytest
 
-from ingestors.constants import (
-    DeviceType, BatteryLevel, Provider, ProviderConfig,
-    PROVIDER_CONFIGS, DeviceData
-)
+from ingestors.constants import PROVIDER_CONFIGS, BatteryLevel, DeviceData, DeviceType, Provider, ProviderConfig
 
 
 class TestDeviceType:
@@ -60,7 +58,7 @@ class TestBatteryLevel:
         test_cases = ["High", "MEDIUM", "Low", "CRITICAL", "Empty"]
         expected = [80, 50, 20, 5, 5]
 
-        for text, expected_value in zip(test_cases, expected):
+        for text, expected_value in zip(test_cases, expected, strict=False):
             assert BatteryLevel.from_text(text) == expected_value
 
 
@@ -89,7 +87,7 @@ class TestProviderConfig:
             client_secret_setting="TEST_CLIENT_SECRET",
             api_base_url="https://api.test.com",
             device_endpoint="/devices",
-            device_types_map={"Scale": DeviceType.SCALE}
+            device_types_map={"Scale": DeviceType.SCALE},
         )
 
         assert config.name == Provider.WITHINGS
@@ -107,7 +105,7 @@ class TestProviderConfig:
             client_secret_setting="TEST_CLIENT_SECRET",
             api_base_url="https://api.test.com",
             device_endpoint="/devices",
-            device_types_map={}
+            device_types_map={},
         )
 
         with pytest.raises(Exception):  # Should be frozen
@@ -146,7 +144,7 @@ class TestProviderConfigs:
 
     def test_device_type_mappings(self):
         """Test that device type mappings are valid"""
-        for provider, config in PROVIDER_CONFIGS.items():
+        for _provider, config in PROVIDER_CONFIGS.items():
             for provider_type, device_type in config.device_types_map.items():
                 assert isinstance(provider_type, str)
                 assert isinstance(device_type, DeviceType)
@@ -162,7 +160,7 @@ class TestDeviceData:
             provider=Provider.WITHINGS,
             device_type=DeviceType.SCALE,
             manufacturer="Test Corp",
-            model="Test Model"
+            model="Test Model",
         )
 
         assert device.provider_device_id == "test-123"
@@ -193,7 +191,7 @@ class TestDeviceData:
             firmware_version="1.2.3",
             serial_number="SN123456",
             status="inactive",
-            raw_data=raw_data
+            raw_data=raw_data,
         )
 
         assert device.provider_device_id == "test-456"
@@ -217,7 +215,7 @@ class TestDeviceData:
             device_type=DeviceType.SCALE,
             manufacturer="Test",
             model="Test",
-            raw_data=None
+            raw_data=None,
         )
 
         assert device.raw_data == {}
@@ -229,7 +227,7 @@ class TestDeviceData:
             provider=Provider.WITHINGS,
             device_type=DeviceType.SCALE,
             manufacturer="Test",
-            model="Test"
+            model="Test",
         )
 
         # Should be able to modify fields (not frozen)
@@ -243,7 +241,7 @@ class TestDeviceData:
             provider=Provider.WITHINGS,
             device_type=DeviceType.SCALE,
             manufacturer="Test",
-            model="Test"
+            model="Test",
         )
 
         # Should not be able to add arbitrary attributes due to slots
@@ -264,7 +262,7 @@ class TestDeviceData:
             firmware_version="1.0.0",  # str
             serial_number="SN123",  # str
             status="active",  # str
-            raw_data={"key": "value"}  # dict
+            raw_data={"key": "value"},  # dict
         )
 
         assert isinstance(device.battery_level, int)

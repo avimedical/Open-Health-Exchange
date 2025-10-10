@@ -1,16 +1,21 @@
 """
 Unit tests for FHIR transformers
 """
-import pytest
+
 from datetime import datetime
 from unittest.mock import patch
 
-from transformers.fhir_transformers import (
-    DeviceTransformer, DeviceAssociationTransformer,
-    FHIRSystem, DEVICE_TYPE_SNOMED,
-    transform_device, transform_device_association
-)
+import pytest
+
 from ingestors.constants import DeviceData, DeviceType, Provider
+from transformers.fhir_transformers import (
+    DEVICE_TYPE_SNOMED,
+    DeviceAssociationTransformer,
+    DeviceTransformer,
+    FHIRSystem,
+    transform_device,
+    transform_device_association,
+)
 
 
 @pytest.fixture
@@ -25,7 +30,7 @@ def sample_device():
         battery_level=75,
         last_sync="2023-01-01T10:00:00Z",
         firmware_version="1.2.3",
-        raw_data={"sync_status": "active"}
+        raw_data={"sync_status": "active"},
     )
 
 
@@ -97,10 +102,7 @@ class TestDeviceTransformer:
         result = device_transformer.transform(sample_device)
 
         properties = result["property"]
-        battery_prop = next(
-            p for p in properties
-            if p["type"]["coding"][0]["code"] == "battery-level"
-        )
+        battery_prop = next(p for p in properties if p["type"]["coding"][0]["code"] == "battery-level")
 
         assert battery_prop["valueQuantity"]["value"] == 75
         assert battery_prop["valueQuantity"]["unit"] == "%"
@@ -111,10 +113,7 @@ class TestDeviceTransformer:
         result = device_transformer.transform(sample_device)
 
         properties = result["property"]
-        sync_prop = next(
-            p for p in properties
-            if p["type"]["text"] == "Last Sync Time"
-        )
+        sync_prop = next(p for p in properties if p["type"]["text"] == "Last Sync Time")
 
         assert sync_prop["valueDateTime"] == "2023-01-01T10:00:00Z"
 
@@ -129,7 +128,7 @@ class TestDeviceTransformer:
 
     def test_transform_note(self, device_transformer, sample_device):
         """Test device note creation"""
-        with patch('transformers.fhir_transformers.datetime') as mock_dt:
+        with patch("transformers.fhir_transformers.datetime") as mock_dt:
             mock_dt.utcnow.return_value = datetime(2023, 1, 1, 12, 0, 0)
 
             result = device_transformer.transform(sample_device)
@@ -145,7 +144,7 @@ class TestDeviceTransformer:
             provider=Provider.FITBIT,
             device_type=DeviceType.UNKNOWN,
             manufacturer="Fitbit",
-            model="Unknown"
+            model="Unknown",
         )
 
         result = device_transformer.transform(minimal_device)
@@ -190,9 +189,7 @@ class TestDeviceAssociationTransformer:
 
     def test_transform_identifiers(self, association_transformer, sample_device):
         """Test association identifier creation"""
-        result = association_transformer.transform(
-            sample_device, "Patient/123", "Device/456"
-        )
+        result = association_transformer.transform(sample_device, "Patient/123", "Device/456")
 
         identifiers = result["identifier"]
 
@@ -209,9 +206,7 @@ class TestDeviceAssociationTransformer:
 
     def test_transform_category(self, association_transformer, sample_device):
         """Test association category"""
-        result = association_transformer.transform(
-            sample_device, "Patient/123", "Device/456"
-        )
+        result = association_transformer.transform(sample_device, "Patient/123", "Device/456")
 
         category = result["category"][0]
         coding = category["coding"][0]
@@ -220,9 +215,7 @@ class TestDeviceAssociationTransformer:
 
     def test_transform_status(self, association_transformer, sample_device):
         """Test association status"""
-        result = association_transformer.transform(
-            sample_device, "Patient/123", "Device/456"
-        )
+        result = association_transformer.transform(sample_device, "Patient/123", "Device/456")
 
         status = result["status"]
         coding = status["coding"][0]
@@ -233,12 +226,10 @@ class TestDeviceAssociationTransformer:
         """Test operation information"""
         patient_ref = "Patient/test-patient-123"
 
-        with patch('transformers.fhir_transformers.datetime') as mock_dt:
+        with patch("transformers.fhir_transformers.datetime") as mock_dt:
             mock_dt.utcnow.return_value = datetime(2023, 1, 1, 12, 0, 0)
 
-            result = association_transformer.transform(
-                sample_device, patient_ref, "Device/456"
-            )
+            result = association_transformer.transform(sample_device, patient_ref, "Device/456")
 
             operation = result["operation"][0]
 
@@ -256,12 +247,10 @@ class TestDeviceAssociationTransformer:
 
     def test_transform_period(self, association_transformer, sample_device):
         """Test association period"""
-        with patch('transformers.fhir_transformers.datetime') as mock_dt:
+        with patch("transformers.fhir_transformers.datetime") as mock_dt:
             mock_dt.utcnow.return_value = datetime(2023, 1, 1, 12, 0, 0)
 
-            result = association_transformer.transform(
-                sample_device, "Patient/123", "Device/456"
-            )
+            result = association_transformer.transform(sample_device, "Patient/123", "Device/456")
 
             period = result["period"]
             assert period["start"] == "2023-01-01T12:00:00Z"
@@ -270,9 +259,7 @@ class TestDeviceAssociationTransformer:
         """Test operator reference"""
         patient_ref = "Patient/test-patient-123"
 
-        result = association_transformer.transform(
-            sample_device, patient_ref, "Device/456"
-        )
+        result = association_transformer.transform(sample_device, patient_ref, "Device/456")
 
         operator = result["operator"][0]
         assert operator["reference"] == patient_ref

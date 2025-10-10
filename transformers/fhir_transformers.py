@@ -2,21 +2,24 @@
 Modern FHIR R5 transformers using Python 3.13+ features
 Now inherits from BaseFHIRTransformer to eliminate duplication
 """
+
 import logging
-from datetime import datetime
-from enum import StrEnum
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol
 
-from ingestors.constants import DeviceData, DeviceType, Provider
-from .base_fhir_transformer import BaseFHIRTransformer
+from django.utils import timezone
 
+from ingestors.constants import DeviceData, DeviceType
+
+from .base_fhir_transformer import BaseFHIRTransformer
 
 logger = logging.getLogger(__name__)
 
 
 class FHIRSystem(StrEnum):
     """FHIR system URLs"""
+
     SNOMED = "http://snomed.info/sct"
     UCUM = "http://unitsofmeasure.org"
     DEVICE_VERSION_TYPE = "http://terminology.hl7.org/CodeSystem/device-version-type"
@@ -30,6 +33,7 @@ class FHIRSystem(StrEnum):
 @dataclass(slots=True, frozen=True)
 class SnomedCode:
     """SNOMED CT code mapping"""
+
     code: str
     display: str
 
@@ -48,6 +52,7 @@ DEVICE_TYPE_SNOMED = {
 
 class FHIRTransformer(Protocol):
     """Protocol for FHIR transformers"""
+
     def transform(self, data: Any) -> dict[str, Any]: ...
 
 
@@ -92,25 +97,23 @@ class DeviceTransformer(BaseFHIRTransformer):
         """Create FHIR device type coding"""
         snomed = DEVICE_TYPE_SNOMED[device_type]
         return {
-            "coding": [{
-                "system": FHIRSystem.SNOMED,
-                "code": snomed.code,
-                "display": snomed.display
-            }],
-            "text": snomed.display
+            "coding": [{"system": FHIRSystem.SNOMED, "code": snomed.code, "display": snomed.display}],
+            "text": snomed.display,
         }
 
     def _create_version(self, firmware_version: str) -> dict[str, Any]:
         """Create FHIR version information"""
         return {
             "type": {
-                "coding": [{
-                    "system": FHIRSystem.DEVICE_VERSION_TYPE,
-                    "code": "firmware-version",
-                    "display": "Firmware Version"
-                }]
+                "coding": [
+                    {
+                        "system": FHIRSystem.DEVICE_VERSION_TYPE,
+                        "code": "firmware-version",
+                        "display": "Firmware Version",
+                    }
+                ]
             },
-            "value": firmware_version
+            "value": firmware_version,
         }
 
     def _create_properties(self, device: DeviceData) -> list[dict[str, Any]]:
@@ -118,45 +121,40 @@ class DeviceTransformer(BaseFHIRTransformer):
         properties = []
 
         if device.battery_level is not None:
-            properties.append({
-                "type": {
-                    "coding": [{
-                        "system": FHIRSystem.DEVICE_PROPERTY_TYPE,
-                        "code": "battery-level",
-                        "display": "Battery Level"
-                    }]
-                },
-                "valueQuantity": {
-                    "value": device.battery_level,
-                    "unit": "%",
-                    "system": FHIRSystem.UCUM,
-                    "code": "%"
+            properties.append(
+                {
+                    "type": {
+                        "coding": [
+                            {
+                                "system": FHIRSystem.DEVICE_PROPERTY_TYPE,
+                                "code": "battery-level",
+                                "display": "Battery Level",
+                            }
+                        ]
+                    },
+                    "valueQuantity": {
+                        "value": device.battery_level,
+                        "unit": "%",
+                        "system": FHIRSystem.UCUM,
+                        "code": "%",
+                    },
                 }
-            })
+            )
 
         if device.last_sync:
-            properties.append({
-                "type": {"text": "Last Sync Time"},
-                "valueDateTime": device.last_sync
-            })
+            properties.append({"type": {"text": "Last Sync Time"}, "valueDateTime": device.last_sync})
 
         return properties
 
     def _create_safety_info(self) -> dict[str, Any]:
         """Create MRI safety information"""
-        return {
-            "coding": [{
-                "system": FHIRSystem.MRI_SAFETY,
-                "code": "mr-unsafe",
-                "display": "MR Unsafe"
-            }]
-        }
+        return {"coding": [{"system": FHIRSystem.MRI_SAFETY, "code": "mr-unsafe", "display": "MR Unsafe"}]}
 
     def _create_note(self, device: DeviceData) -> dict[str, Any]:
         """Create device note"""
         return {
-            "time": datetime.utcnow().isoformat() + "Z",
-            "text": f"Device synchronized from {device.provider.title()} Health Platform"
+            "time": timezone.now().isoformat() + "Z",
+            "text": f"Device synchronized from {device.provider.title()} Health Platform",
         }
 
 
@@ -169,7 +167,7 @@ class DeviceAssociationTransformer(BaseFHIRTransformer):
     def transform(self, device: DeviceData, patient_ref: str, device_ref: str) -> dict[str, Any]:
         """Transform to FHIR DeviceAssociation resource"""
         # Create unique association ID using device ID and patient ID
-        patient_id = patient_ref.split('/')[-1]  # Extract patient ID from reference
+        patient_id = patient_ref.split("/")[-1]  # Extract patient ID from reference
         association_id = f"{device.provider_device_id}-{patient_id}"
         timestamp = self.create_fhir_timestamp()
 
@@ -185,7 +183,7 @@ class DeviceAssociationTransformer(BaseFHIRTransformer):
             "subject": {"reference": patient_ref},
             "period": {"start": timestamp},
             "operator": [{"reference": patient_ref}],
-            "operation": [self._create_operation(patient_ref, timestamp)]
+            "operation": [self._create_operation(patient_ref, timestamp)],
         }
 
     # _create_identifier removed - now using unified create_fhir_identifier from base class
@@ -193,35 +191,27 @@ class DeviceAssociationTransformer(BaseFHIRTransformer):
     def _create_category(self) -> dict[str, Any]:
         """Create association category"""
         return {
-            "coding": [{
-                "system": FHIRSystem.DEVICE_ASSOCIATION_CATEGORY,
-                "code": "home-use",
-                "display": "Home Use"
-            }]
+            "coding": [{"system": FHIRSystem.DEVICE_ASSOCIATION_CATEGORY, "code": "home-use", "display": "Home Use"}]
         }
 
     def _create_status(self, status_code: str) -> dict[str, Any]:
         """Create association status"""
         return {
-            "coding": [{
-                "system": FHIRSystem.DEVICE_ASSOCIATION_STATUS,
-                "code": status_code,
-                "display": status_code.title()
-            }]
+            "coding": [
+                {"system": FHIRSystem.DEVICE_ASSOCIATION_STATUS, "code": status_code, "display": status_code.title()}
+            ]
         }
 
     def _create_operation(self, patient_ref: str, timestamp: str) -> dict[str, Any]:
         """Create operation information"""
         return {
             "status": {
-                "coding": [{
-                    "system": FHIRSystem.DEVICE_ASSOCIATION_OPERATION_STATUS,
-                    "code": "active",
-                    "display": "Active"
-                }]
+                "coding": [
+                    {"system": FHIRSystem.DEVICE_ASSOCIATION_OPERATION_STATUS, "code": "active", "display": "Active"}
+                ]
             },
             "operator": [{"reference": patient_ref}],
-            "period": {"start": timestamp}
+            "period": {"start": timestamp},
         }
 
 
@@ -231,8 +221,6 @@ def transform_device(device: DeviceData) -> dict[str, Any]:
     return DeviceTransformer().transform(device)
 
 
-def transform_device_association(
-    device: DeviceData, patient_ref: str, device_ref: str
-) -> dict[str, Any]:
+def transform_device_association(device: DeviceData, patient_ref: str, device_ref: str) -> dict[str, Any]:
     """Transform to FHIR DeviceAssociation resource"""
     return DeviceAssociationTransformer().transform(device, patient_ref, device_ref)

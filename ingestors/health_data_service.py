@@ -1,21 +1,26 @@
 """
 Health data synchronization service
 """
+
 import logging
 import time
 from typing import Any
-from datetime import datetime, timezone
+
 from django.conf import settings
+from django.utils import timezone
 
-from .health_data_manager import HealthDataManagerFactory, HealthDataManager
-from .health_sync_strategies import SyncStrategy, get_default_sync_strategy
-from .health_data_constants import (
-    Provider, HealthDataType, HealthSyncConfig, HealthSyncResult,
-    SyncTrigger, HealthDataRecord, DateRange
-)
-from transformers.health_data_transformers import HealthDataTransformer
 from publishers.fhir.health_data_publisher import HealthDataPublisher
+from transformers.health_data_transformers import HealthDataTransformer
 
+from .health_data_constants import (
+    HealthDataRecord,
+    HealthDataType,
+    HealthSyncConfig,
+    HealthSyncResult,
+    Provider,
+)
+from .health_data_manager import HealthDataManagerFactory
+from .health_sync_strategies import SyncStrategy, get_default_sync_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,7 @@ class HealthDataSyncService:
         sync_strategy: SyncStrategy | None = None,
         config: HealthSyncConfig | None = None,
         patient_reference: str | None = None,
-        device_reference: str | None = None
+        device_reference: str | None = None,
     ) -> HealthSyncResult:
         """
         Synchronize health data for a user from a specific provider
@@ -75,25 +80,18 @@ class HealthDataSyncService:
 
         # Initialize result
         result = HealthSyncResult(
-            user_id=user_id,
-            provider=provider,
-            data_types=data_types,
-            trigger=sync_strategy.sync_trigger
+            user_id=user_id, provider=provider, data_types=data_types, trigger=sync_strategy.sync_trigger
         )
 
         try:
             self.logger.info(f"Starting health data sync for user {user_id} with {provider.value}")
 
             # 1. Get sync parameters
-            sync_params = sync_strategy.get_sync_params(
-                user_id, data_types, config
-            )
+            sync_params = sync_strategy.get_sync_params(user_id, data_types, config)
             self.logger.debug(f"Sync parameters: {sync_params}")
 
             # 2. Fetch health data from provider
-            health_records = self._fetch_health_data(
-                user_id, provider, data_types, sync_params
-            )
+            health_records = self._fetch_health_data(user_id, provider, data_types, sync_params)
             result.records_fetched = len(health_records)
 
             if not health_records:
@@ -104,9 +102,7 @@ class HealthDataSyncService:
             self.logger.info(f"Fetched {len(health_records)} health records from {provider.value}")
 
             # 3. Transform to FHIR resources
-            fhir_observations = self._transform_health_data(
-                health_records, patient_reference, device_reference
-            )
+            fhir_observations = self._transform_health_data(health_records, patient_reference, device_reference)
             result.records_transformed = len(fhir_observations)
 
             if not fhir_observations:
@@ -126,10 +122,7 @@ class HealthDataSyncService:
                 result.errors.extend(publish_result["errors"])
 
             # 6. Determine success
-            result.success = (
-                len(result.errors or []) == 0 and
-                publish_result.get("success", False)
-            )
+            result.success = len(result.errors or []) == 0 and publish_result.get("success", False)
 
             # 7. Calculate processing time
             result.processing_time_ms = int((time.time() - start_time) * 1000)
@@ -153,13 +146,10 @@ class HealthDataSyncService:
             result.processing_time_ms = int((time.time() - start_time) * 1000)
             return result
 
-    def _create_default_config(
-        self,
-        user_id: str,
-        data_types: list[HealthDataType]
-    ) -> HealthSyncConfig:
+    def _create_default_config(self, user_id: str, data_types: list[HealthDataType]) -> HealthSyncConfig:
         """Create default sync configuration"""
         from datetime import timedelta
+
         from .health_data_constants import AggregationLevel, SyncFrequency
 
         return HealthSyncConfig(
@@ -167,15 +157,11 @@ class HealthDataSyncService:
             enabled_data_types=data_types,
             aggregation_preference=AggregationLevel.INDIVIDUAL,  # No aggregation in Phase 1
             sync_frequency=SyncFrequency.DAILY,
-            retention_period=timedelta(days=90)
+            retention_period=timedelta(days=90),
         )
 
     def _fetch_health_data(
-        self,
-        user_id: str,
-        provider: Provider,
-        data_types: list[HealthDataType],
-        sync_params: dict[str, Any]
+        self, user_id: str, provider: Provider, data_types: list[HealthDataType], sync_params: dict[str, Any]
     ) -> list[HealthDataRecord]:
         """Fetch health data from provider"""
         try:
@@ -188,10 +174,7 @@ class HealthDataSyncService:
 
             # Fetch data
             health_records = health_manager.fetch_health_data(
-                user_id=user_id,
-                data_types=data_types,
-                date_range=date_range,
-                sync_trigger=sync_trigger
+                user_id=user_id, data_types=data_types, date_range=date_range, sync_trigger=sync_trigger
             )
 
             return health_records
@@ -201,17 +184,12 @@ class HealthDataSyncService:
             raise
 
     def _transform_health_data(
-        self,
-        health_records: list[HealthDataRecord],
-        patient_reference: str,
-        device_reference: str | None
+        self, health_records: list[HealthDataRecord], patient_reference: str, device_reference: str | None
     ) -> list[dict[str, Any]]:
         """Transform health data to FHIR observations"""
         try:
             fhir_observations = self.transformer.transform_multiple_records(
-                records=health_records,
-                patient_reference=patient_reference,
-                device_reference=device_reference
+                records=health_records, patient_reference=patient_reference, device_reference=device_reference
             )
 
             return fhir_observations
@@ -221,19 +199,16 @@ class HealthDataSyncService:
             raise
 
     def _publish_health_data(
-        self,
-        fhir_observations: list[dict[str, Any]],
-        sync_params: dict[str, Any]
+        self, fhir_observations: list[dict[str, Any]], sync_params: dict[str, Any]
     ) -> dict[str, Any]:
         """Publish FHIR observations to server"""
         try:
             # Get batch size from sync params
-            batch_size = sync_params.get("batch_size", settings.BATCH_SIZES['PUBLISHER'])
+            batch_size = sync_params.get("batch_size", settings.BATCH_SIZES["PUBLISHER"])
 
             # Publish observations
             publish_result = self.fhir_publisher.publish_health_observations(
-                observations=fhir_observations,
-                batch_size=batch_size
+                observations=fhir_observations, batch_size=batch_size
             )
 
             return publish_result
@@ -252,23 +227,15 @@ class HealthDataSyncService:
 
             # Add user context
             stats["user_id"] = user_id
-            stats["last_check"] = datetime.utcnow().isoformat()
+            stats["last_check"] = timezone.now().isoformat()
 
             return stats
 
         except Exception as e:
             self.logger.error(f"Failed to get sync statistics for user {user_id}: {e}")
-            return {
-                "user_id": user_id,
-                "error": str(e),
-                "last_check": datetime.utcnow().isoformat()
-            }
+            return {"user_id": user_id, "error": str(e), "last_check": timezone.now().isoformat()}
 
-    def delete_user_health_data(
-        self,
-        user_id: str,
-        provider: Provider | str
-    ) -> dict[str, Any]:
+    def delete_user_health_data(self, user_id: str, provider: Provider | str) -> dict[str, Any]:
         """Delete all health data for a user from a specific provider"""
         try:
             if isinstance(provider, str):
@@ -277,8 +244,7 @@ class HealthDataSyncService:
             patient_ref = f"Patient/{user_id}"
 
             result = self.fhir_publisher.delete_health_data_by_provider(
-                patient_reference=patient_ref,
-                provider=provider
+                patient_reference=patient_ref, provider=provider
             )
 
             self.logger.info(
@@ -290,11 +256,7 @@ class HealthDataSyncService:
 
         except Exception as e:
             self.logger.error(f"Failed to delete health data for user {user_id}: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "deleted_count": 0
-            }
+            return {"success": False, "error": str(e), "deleted_count": 0}
 
 
 class MockHealthDataSyncService(HealthDataSyncService):
@@ -307,21 +269,17 @@ class MockHealthDataSyncService(HealthDataSyncService):
         self.mock_records = []
 
     def _fetch_health_data(
-        self,
-        user_id: str,
-        provider: Provider,
-        data_types: list[HealthDataType],
-        sync_params: dict[str, Any]
+        self, user_id: str, provider: Provider, data_types: list[HealthDataType], sync_params: dict[str, Any]
     ) -> list[HealthDataRecord]:
         """Mock health data fetching"""
         if self.mock_records:
             return self.mock_records
 
         # Generate mock data
-        from datetime import datetime, timedelta
+        from datetime import timedelta
 
         mock_records = []
-        base_time = datetime.utcnow() - timedelta(hours=1)
+        base_time = timezone.now() - timedelta(hours=1)
 
         for i, data_type in enumerate(data_types):
             if data_type == HealthDataType.HEART_RATE:
@@ -332,7 +290,7 @@ class MockHealthDataSyncService(HealthDataSyncService):
                     timestamp=base_time + timedelta(minutes=i * 10),
                     value=72.0 + i,
                     unit="bpm",
-                    metadata={"source": "mock"}
+                    metadata={"source": "mock"},
                 )
             elif data_type == HealthDataType.STEPS:
                 record = HealthDataRecord(
@@ -342,7 +300,7 @@ class MockHealthDataSyncService(HealthDataSyncService):
                     timestamp=base_time + timedelta(minutes=i * 10),
                     value=1000.0 + i * 100,
                     unit="steps",
-                    metadata={"source": "mock"}
+                    metadata={"source": "mock"},
                 )
             else:
                 continue  # Skip unsupported types in mock
@@ -352,9 +310,7 @@ class MockHealthDataSyncService(HealthDataSyncService):
         return mock_records
 
     def _publish_health_data(
-        self,
-        fhir_observations: list[dict[str, Any]],
-        sync_params: dict[str, Any]
+        self, fhir_observations: list[dict[str, Any]], sync_params: dict[str, Any]
     ) -> dict[str, Any]:
         """Publish to real FHIR server and store for inspection"""
         # Store observations for test inspection

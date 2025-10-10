@@ -1,15 +1,15 @@
 """
 Health data sync strategies for different sync scenarios
 """
+
 import logging
-from typing import Protocol
-from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+from typing import Protocol
 
-from .health_data_constants import (
-    HealthDataType, DateRange, SyncTrigger, HealthSyncConfig
-)
+from django.utils import timezone
 
+from .health_data_constants import DateRange, HealthDataType, HealthSyncConfig, SyncTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +22,12 @@ class SyncStrategy(Protocol):
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get sync parameters for this strategy"""
         ...
 
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for this sync strategy"""
         ...
 
@@ -44,20 +40,15 @@ class BaseSyncStrategy(ABC):
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     @abstractmethod
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for this sync strategy"""
-        pass
 
     def get_sync_params(
         self,
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get common sync parameters"""
         date_range = self.get_date_range(config, last_sync)
@@ -69,7 +60,7 @@ class BaseSyncStrategy(ABC):
             "data_types": data_types,
             "config": config,
             "batch_size": self._get_batch_size(),
-            "priority": self._get_priority()
+            "priority": self._get_priority(),
         }
 
     def _get_batch_size(self) -> int:
@@ -78,23 +69,23 @@ class BaseSyncStrategy(ABC):
             case SyncTrigger.INITIAL:
                 return 1000  # Large batches for historical data
             case SyncTrigger.INCREMENTAL:
-                return 500   # Medium batches for regular sync
+                return 500  # Medium batches for regular sync
             case SyncTrigger.WEBHOOK:
-                return 100   # Small batches for real-time
+                return 100  # Small batches for real-time
             case SyncTrigger.MANUAL:
-                return 500   # Medium batches for manual sync
+                return 500  # Medium batches for manual sync
 
     def _get_priority(self) -> str:
         """Get priority level for this strategy"""
         match self.sync_trigger:
             case SyncTrigger.WEBHOOK:
-                return "high"     # Real-time has highest priority
+                return "high"  # Real-time has highest priority
             case SyncTrigger.MANUAL:
-                return "medium"   # User-triggered is medium
+                return "medium"  # User-triggered is medium
             case SyncTrigger.INCREMENTAL:
-                return "low"      # Regular sync is low
+                return "low"  # Regular sync is low
             case SyncTrigger.INITIAL:
-                return "low"      # Initial sync is low (can be slow)
+                return "low"  # Initial sync is low (can be slow)
 
 
 class InitialSyncStrategy(BaseSyncStrategy):
@@ -104,13 +95,9 @@ class InitialSyncStrategy(BaseSyncStrategy):
         super().__init__(SyncTrigger.INITIAL)
         self.lookback_days = lookback_days
 
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for initial sync"""
-        end_date = datetime.utcnow()
+        end_date = timezone.now()
         start_date = end_date - timedelta(days=self.lookback_days)
 
         self.logger.info(f"Initial sync date range: {start_date} to {end_date}")
@@ -122,17 +109,19 @@ class InitialSyncStrategy(BaseSyncStrategy):
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get initial sync parameters"""
         params = super().get_sync_params(user_id, data_types, config, last_sync)
 
         # Add initial sync specific parameters
-        params.update({
-            "include_all_records": True,
-            "skip_recent_check": True,  # Don't skip "recent" data in initial sync
-            "allow_large_batches": True
-        })
+        params.update(
+            {
+                "include_all_records": True,
+                "skip_recent_check": True,  # Don't skip "recent" data in initial sync
+                "allow_large_batches": True,
+            }
+        )
 
         return params
 
@@ -144,13 +133,9 @@ class IncrementalSyncStrategy(BaseSyncStrategy):
         super().__init__(SyncTrigger.INCREMENTAL)
         self.overlap_minutes = overlap_minutes
 
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for incremental sync"""
-        end_date = datetime.utcnow()
+        end_date = timezone.now()
 
         if last_sync is None:
             # Fallback to recent data if no last sync
@@ -168,17 +153,19 @@ class IncrementalSyncStrategy(BaseSyncStrategy):
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get incremental sync parameters"""
         params = super().get_sync_params(user_id, data_types, config, last_sync)
 
         # Add incremental sync specific parameters
-        params.update({
-            "include_all_records": False,
-            "skip_duplicates": True,    # Skip data we've already processed
-            "use_deduplication": True   # Enable deduplication for overlapping data
-        })
+        params.update(
+            {
+                "include_all_records": False,
+                "skip_duplicates": True,  # Skip data we've already processed
+                "use_deduplication": True,  # Enable deduplication for overlapping data
+            }
+        )
 
         return params
 
@@ -190,13 +177,9 @@ class WebhookSyncStrategy(BaseSyncStrategy):
         super().__init__(SyncTrigger.WEBHOOK)
         self.lookback_minutes = lookback_minutes
 
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for webhook sync"""
-        end_date = datetime.utcnow()
+        end_date = timezone.now()
         # Only sync very recent data for webhooks
         start_date = end_date - timedelta(minutes=self.lookback_minutes)
 
@@ -209,18 +192,20 @@ class WebhookSyncStrategy(BaseSyncStrategy):
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get webhook sync parameters"""
         params = super().get_sync_params(user_id, data_types, config, last_sync)
 
         # Add webhook sync specific parameters
-        params.update({
-            "include_all_records": False,
-            "real_time_mode": True,     # Process immediately
-            "skip_aggregation": True,   # Don't aggregate real-time data
-            "high_priority": True       # Process before other tasks
-        })
+        params.update(
+            {
+                "include_all_records": False,
+                "real_time_mode": True,  # Process immediately
+                "skip_aggregation": True,  # Don't aggregate real-time data
+                "high_priority": True,  # Process before other tasks
+            }
+        )
 
         return params
 
@@ -232,18 +217,16 @@ class ManualSyncStrategy(BaseSyncStrategy):
         super().__init__(SyncTrigger.MANUAL)
         self.custom_date_range = custom_date_range
 
-    def get_date_range(
-        self,
-        config: HealthSyncConfig,
-        last_sync: datetime | None = None
-    ) -> DateRange:
+    def get_date_range(self, config: HealthSyncConfig, last_sync: datetime | None = None) -> DateRange:
         """Get date range for manual sync"""
         if self.custom_date_range:
-            self.logger.info(f"Manual sync with custom range: {self.custom_date_range.start} to {self.custom_date_range.end}")
+            self.logger.info(
+                f"Manual sync with custom range: {self.custom_date_range.start} to {self.custom_date_range.end}"
+            )
             return self.custom_date_range
 
         # Default to recent data if no custom range
-        end_date = datetime.utcnow()
+        end_date = timezone.now()
         start_date = end_date - timedelta(days=7)  # Last week
 
         self.logger.info(f"Manual sync with default range: {start_date} to {end_date}")
@@ -255,18 +238,20 @@ class ManualSyncStrategy(BaseSyncStrategy):
         user_id: str,
         data_types: list[HealthDataType],
         config: HealthSyncConfig,
-        last_sync: datetime | None = None
+        last_sync: datetime | None = None,
     ) -> dict:
         """Get manual sync parameters"""
         params = super().get_sync_params(user_id, data_types, config, last_sync)
 
         # Add manual sync specific parameters
-        params.update({
-            "include_all_records": True,
-            "user_triggered": True,      # User explicitly requested this
-            "bypass_limits": True,       # Allow larger data sets
-            "detailed_logging": True     # More verbose logging for user feedback
-        })
+        params.update(
+            {
+                "include_all_records": True,
+                "user_triggered": True,  # User explicitly requested this
+                "bypass_limits": True,  # Allow larger data sets
+                "detailed_logging": True,  # More verbose logging for user feedback
+            }
+        )
 
         return params
 
@@ -295,29 +280,22 @@ class SyncStrategyFactory:
         return ManualSyncStrategy(date_range)
 
     @classmethod
-    def create_for_trigger(
-        cls,
-        trigger: SyncTrigger,
-        **kwargs
-    ) -> SyncStrategy:
+    def create_for_trigger(cls, trigger: SyncTrigger, **kwargs) -> SyncStrategy:
         """Create strategy based on sync trigger"""
         match trigger:
             case SyncTrigger.INITIAL:
-                return cls.create_initial_sync(kwargs.get('lookback_days', 30))
+                return cls.create_initial_sync(kwargs.get("lookback_days", 30))
             case SyncTrigger.INCREMENTAL:
-                return cls.create_incremental_sync(kwargs.get('overlap_minutes', 5))
+                return cls.create_incremental_sync(kwargs.get("overlap_minutes", 5))
             case SyncTrigger.WEBHOOK:
-                return cls.create_webhook_sync(kwargs.get('lookback_minutes', 15))
+                return cls.create_webhook_sync(kwargs.get("lookback_minutes", 15))
             case SyncTrigger.MANUAL:
-                return cls.create_manual_sync(kwargs.get('date_range'))
+                return cls.create_manual_sync(kwargs.get("date_range"))
             case _:
                 raise ValueError(f"Unsupported sync trigger: {trigger}")
 
 
-def get_default_sync_strategy(
-    user_has_synced_before: bool,
-    trigger: SyncTrigger | None = None
-) -> SyncStrategy:
+def get_default_sync_strategy(user_has_synced_before: bool, trigger: SyncTrigger | None = None) -> SyncStrategy:
     """Get default sync strategy based on user history"""
 
     if trigger:

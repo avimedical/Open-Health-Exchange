@@ -2,6 +2,7 @@
 Modern device mapping service - Provider-agnostic, cached, type-safe
 Maps provider device IDs to FHIR Device UUIDs using Django cache backend
 """
+
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from publishers.fhir.client import FHIRClient
+
 from .constants import Provider
 
 logger = logging.getLogger(__name__)
@@ -18,13 +20,14 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True, frozen=True)
 class DeviceQuery:
     """Immutable device query for batch operations"""
+
     provider: Provider
     device_id: str
 
     @property
     def cache_key(self) -> str:
         """Generate cache key for this query"""
-        prefix = settings.DEVICE_MAPPING['CACHE_PREFIX']
+        prefix = settings.DEVICE_MAPPING["CACHE_PREFIX"]
         return f"{prefix}:{self.provider.value}:{self.device_id}"
 
 
@@ -61,8 +64,7 @@ class DeviceMappingService:
         if not device_ids:
             return {}
 
-        queries = [DeviceQuery(provider=provider, device_id=device_id)
-                  for device_id in device_ids if device_id]
+        queries = [DeviceQuery(provider=provider, device_id=device_id) for device_id in device_ids if device_id]
         return self.get_device_references(queries)
 
     def get_device_references(self, queries: list[DeviceQuery]) -> dict[str, str | None]:
@@ -77,8 +79,9 @@ class DeviceMappingService:
             # Phase 1: Batch cache lookup
             results, uncached_queries = self._batch_cache_lookup(queries)
 
-            logger.info(f"Cache performance: {len(results)}/{len(queries)} hits, "
-                       f"{len(uncached_queries)} FHIR lookups needed")
+            logger.info(
+                f"Cache performance: {len(results)}/{len(queries)} hits, {len(uncached_queries)} FHIR lookups needed"
+            )
 
             # Phase 2: Batch FHIR search for cache misses
             if uncached_queries:
@@ -149,17 +152,14 @@ class DeviceMappingService:
 
     def _search_single_device(self, identifier_system: str, device_id: str) -> str | None:
         """Single device FHIR search - consolidated logic"""
-        search_params = {
-            'identifier': f"{identifier_system}|{device_id}",
-            '_count': 1
-        }
+        search_params = {"identifier": f"{identifier_system}|{device_id}", "_count": 1}
 
         logger.debug(f"FHIR search: {search_params}")
-        search_result = self.fhir_client.search_resource('Device', search_params)
+        search_result = self.fhir_client.search_resource("Device", search_params)
 
-        if entries := search_result.get('entry', []):
-            if device_resource := entries[0].get('resource', {}):
-                if device_uuid := device_resource.get('id'):
+        if entries := search_result.get("entry", []):
+            if device_resource := entries[0].get("resource", {}):
+                if device_uuid := device_resource.get("id"):
                     logger.debug(f"FHIR found device {device_id} -> {device_uuid}")
                     return device_uuid
 
@@ -183,11 +183,11 @@ class DeviceMappingService:
         try:
             # Batch cache operations
             if positive_cache:
-                cache.set_many(positive_cache, timeout=self.config['CACHE_TTL'])
+                cache.set_many(positive_cache, timeout=self.config["CACHE_TTL"])
                 logger.debug(f"Cached {len(positive_cache)} positive results")
 
             if negative_cache:
-                cache.set_many(negative_cache, timeout=self.config['NEGATIVE_CACHE_TTL'])
+                cache.set_many(negative_cache, timeout=self.config["NEGATIVE_CACHE_TTL"])
                 logger.debug(f"Cached {len(negative_cache)} negative results")
 
         except Exception as e:
@@ -195,7 +195,7 @@ class DeviceMappingService:
 
     def _get_identifier_system(self, provider: Provider) -> str:
         """Provider-agnostic identifier system lookup from settings"""
-        systems = self.config['IDENTIFIER_SYSTEMS']
+        systems = self.config["IDENTIFIER_SYSTEMS"]
 
         match provider.value:
             case system_key if system_key in systems:
@@ -206,18 +206,20 @@ class DeviceMappingService:
 
     def clear_cache(self) -> None:
         """Clear device mapping cache (development/testing only)"""
-        logger.warning("Full cache pattern deletion not supported with Django cache. "
-                      "Use cache.clear() for full clear or wait for TTL expiration.")
+        logger.warning(
+            "Full cache pattern deletion not supported with Django cache. "
+            "Use cache.clear() for full clear or wait for TTL expiration."
+        )
 
     def get_cache_stats(self) -> dict[str, str | int]:
         """Get cache configuration and status"""
         return {
-            'cache_backend': str(cache),
-            'cache_ttl_hours': self.config['CACHE_TTL'] // 3600,
-            'negative_cache_ttl_hours': self.config['NEGATIVE_CACHE_TTL'] // 3600,
-            'cache_prefix': self.config['CACHE_PREFIX'],
-            'batch_size': self.config['BATCH_SIZE'],
-            'supported_providers': list(self.config['IDENTIFIER_SYSTEMS'].keys())
+            "cache_backend": str(cache),
+            "cache_ttl_hours": self.config["CACHE_TTL"] // 3600,
+            "negative_cache_ttl_hours": self.config["NEGATIVE_CACHE_TTL"] // 3600,
+            "cache_prefix": self.config["CACHE_PREFIX"],
+            "batch_size": self.config["BATCH_SIZE"],
+            "supported_providers": list(self.config["IDENTIFIER_SYSTEMS"].keys()),
         }
 
 

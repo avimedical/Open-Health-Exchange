@@ -1,17 +1,15 @@
 """
 Modern, generic device manager using Python 3.13+ features
 """
+
 import logging
-from abc import ABC, abstractmethod
-from typing import Protocol, runtime_checkable
 from dataclasses import dataclass
-from contextlib import contextmanager
+from typing import Protocol, runtime_checkable
 
 from django.conf import settings
 from social_django.models import UserSocialAuth
 
-from .constants import Provider, DeviceData, BatteryLevel, PROVIDER_CONFIGS, DeviceType
-
+from .constants import PROVIDER_CONFIGS, BatteryLevel, DeviceData, DeviceType, Provider
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +17,14 @@ logger = logging.getLogger(__name__)
 @runtime_checkable
 class APIClient(Protocol):
     """Protocol for API clients"""
+
     def fetch_devices(self) -> list[dict]: ...
 
 
 @dataclass(slots=True, frozen=True)
 class OAuthCredentials:
     """OAuth credentials for API access"""
+
     access_token: str
     refresh_token: str | None = None
     user_id: str | None = None
@@ -33,17 +33,14 @@ class OAuthCredentials:
 
 class DeviceManagerError(Exception):
     """Base exception for device manager errors"""
-    pass
 
 
 class AuthenticationError(DeviceManagerError):
     """Authentication related errors"""
-    pass
 
 
 class APIError(DeviceManagerError):
     """API communication errors"""
-    pass
 
 
 class DeviceManager:
@@ -73,15 +70,12 @@ class DeviceManager:
     def _get_user_credentials(self, user_id: str) -> OAuthCredentials:
         """Get OAuth credentials for a user"""
         try:
-            auth = UserSocialAuth.objects.get(
-                user__ehr_user_id=user_id,
-                provider=self.provider
-            )
+            auth = UserSocialAuth.objects.get(user__ehr_user_id=user_id, provider=self.provider)
             return OAuthCredentials(
                 access_token=auth.extra_data["access_token"],
                 refresh_token=auth.extra_data.get("refresh_token"),
                 user_id=auth.extra_data.get("userid"),
-                expires_in=auth.extra_data.get("expires")
+                expires_in=auth.extra_data.get("expires"),
             )
         except UserSocialAuth.DoesNotExist:
             raise AuthenticationError(f"No {self.provider} credentials for user {user_id}")
@@ -100,8 +94,9 @@ class DeviceManager:
 
     def _create_withings_client(self, credentials: OAuthCredentials) -> APIClient:
         """Create Withings API client"""
-        from withings_api import WithingsApi, Credentials2
         import time
+
+        from withings_api import Credentials2, WithingsApi
 
         withings_credentials = Credentials2(
             access_token=credentials.access_token,
@@ -111,7 +106,7 @@ class DeviceManager:
             client_id=getattr(settings, self.config.client_id_setting),
             consumer_secret=getattr(settings, self.config.client_secret_setting),
             expires_in=credentials.expires_in or 10800,
-            token_expiry=int(time.time()) + (credentials.expires_in or 10800)
+            token_expiry=int(time.time()) + (credentials.expires_in or 10800),
         )
 
         return WithingsApiAdapter(WithingsApi(withings_credentials, refresh_cb=lambda x: None))
@@ -126,7 +121,7 @@ class DeviceManager:
             oauth2=True,
             access_token=credentials.access_token,
             refresh_token=credentials.refresh_token,
-            refresh_cb=lambda token: None
+            refresh_cb=lambda token: None,
         )
 
         return FitbitApiAdapter(client)
@@ -143,9 +138,7 @@ class DeviceManager:
 
     def _transform_withings_device(self, device) -> DeviceData:
         """Transform Withings device data"""
-        device_type = self.config.device_types_map.get(
-            device.type, DeviceType.UNKNOWN
-        )
+        device_type = self.config.device_types_map.get(device.type, DeviceType.UNKNOWN)
 
         return DeviceData(
             provider_device_id=str(device.deviceid),
@@ -157,15 +150,13 @@ class DeviceManager:
             raw_data={
                 "deviceid": device.deviceid,
                 "timezone": str(device.timezone) if device.timezone else None,
-                "battery_text": device.battery
-            }
+                "battery_text": device.battery,
+            },
         )
 
     def _transform_fitbit_device(self, device_data: dict) -> DeviceData:
         """Transform Fitbit device data"""
-        device_type = self.config.device_types_map.get(
-            device_data.get("type", ""), DeviceType.UNKNOWN
-        )
+        device_type = self.config.device_types_map.get(device_data.get("type", ""), DeviceType.UNKNOWN)
 
         return DeviceData(
             provider_device_id=str(device_data.get("id", "")),
@@ -180,8 +171,8 @@ class DeviceManager:
                 "id": device_data.get("id"),
                 "type": device_data.get("type"),
                 "batteryLevel": device_data.get("batteryLevel"),
-                "mac": device_data.get("mac")
-            }
+                "mac": device_data.get("mac"),
+            },
         )
 
 

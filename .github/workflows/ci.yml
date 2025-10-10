@@ -49,9 +49,13 @@ jobs:
         run: |
           poetry install --no-interaction --no-ansi
 
-      - name: Lint
+      - name: Lint with Ruff
         run: |
-          poetry run flake8
+          poetry run ruff check .
+
+      - name: Check formatting with Ruff
+        run: |
+          poetry run ruff format --check .
 
       - name: Run tests
         env:

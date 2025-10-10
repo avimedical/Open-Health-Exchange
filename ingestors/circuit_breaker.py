@@ -1,13 +1,16 @@
 """
 Circuit breaker pattern implementation for external API calls.
 """
-import time
+
 import logging
-from typing import Callable, Any, Optional, Dict
-from enum import Enum
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from threading import Lock
+from enum import Enum
 from functools import wraps
+from threading import Lock
+from typing import Any
+
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -15,23 +18,24 @@ logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject requests
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject requests
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Circuit breaker configuration."""
-    failure_threshold: int = 5      # Number of failures before opening
-    success_threshold: int = 3      # Number of successes to close from half-open
-    timeout: float = 60.0           # Seconds before trying half-open
+
+    failure_threshold: int = 5  # Number of failures before opening
+    success_threshold: int = 3  # Number of successes to close from half-open
+    timeout: float = 60.0  # Seconds before trying half-open
     exceptions: tuple = (Exception,)  # Exceptions that trigger circuit breaker
 
 
 class CircuitBreakerError(Exception):
     """Exception raised when circuit breaker is open."""
-    pass
 
 
 class CircuitBreaker:
@@ -43,14 +47,16 @@ class CircuitBreaker:
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
-        self.last_failure_time: Optional[float] = None
+        self.last_failure_time: float | None = None
         self.lock = Lock()
 
     def __call__(self, func: Callable) -> Callable:
         """Decorator to wrap functions with circuit breaker."""
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             return self.call(func, *args, **kwargs)
+
         return wrapper
 
     def call(self, func: Callable, *args, **kwargs) -> Any:
@@ -113,11 +119,11 @@ class CircuitBreaker:
     def get_state(self) -> dict:
         """Get current circuit breaker state."""
         return {
-            'name': self.name,
-            'state': self.state.value,
-            'failure_count': self.failure_count,
-            'success_count': self.success_count,
-            'last_failure_time': self.last_failure_time,
+            "name": self.name,
+            "state": self.state.value,
+            "failure_count": self.failure_count,
+            "success_count": self.success_count,
+            "last_failure_time": self.last_failure_time,
         }
 
     def force_open(self):
@@ -137,10 +143,10 @@ class CircuitBreakerRegistry:
     """Registry for managing multiple circuit breakers."""
 
     def __init__(self):
-        self._breakers: Dict[str, CircuitBreaker] = {}
+        self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = Lock()
 
-    def get_breaker(self, name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
+    def get_breaker(self, name: str, config: CircuitBreakerConfig | None = None) -> CircuitBreaker:
         """Get or create a circuit breaker."""
         with self._lock:
             if name not in self._breakers:
@@ -149,7 +155,7 @@ class CircuitBreakerRegistry:
                 self._breakers[name] = CircuitBreaker(name, config)
             return self._breakers[name]
 
-    def get_all_states(self) -> Dict[str, dict]:
+    def get_all_states(self) -> dict[str, dict]:
         """Get states of all circuit breakers."""
         return {name: breaker.get_state() for name, breaker in self._breakers.items()}
 
@@ -167,10 +173,10 @@ registry = CircuitBreakerRegistry()
 def get_withings_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Withings API."""
     config = CircuitBreakerConfig(
-        failure_threshold=settings.CIRCUIT_BREAKER_CONFIG['FAILURE_THRESHOLD'],
+        failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
         success_threshold=2,  # Default success threshold
-        timeout=settings.CIRCUIT_BREAKER_CONFIG['PROVIDER_TIMEOUT'],
-        exceptions=(Exception,)
+        timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
+        exceptions=(Exception,),
     )
     return registry.get_breaker("withings_api", config)
 
@@ -178,10 +184,10 @@ def get_withings_circuit_breaker() -> CircuitBreaker:
 def get_fitbit_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Fitbit API."""
     config = CircuitBreakerConfig(
-        failure_threshold=settings.CIRCUIT_BREAKER_CONFIG['FAILURE_THRESHOLD'],
+        failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
         success_threshold=2,  # Default success threshold
-        timeout=settings.CIRCUIT_BREAKER_CONFIG['PROVIDER_TIMEOUT'],
-        exceptions=(Exception,)
+        timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
+        exceptions=(Exception,),
     )
     return registry.get_breaker("fitbit_api", config)
 
@@ -191,8 +197,8 @@ def get_fhir_circuit_breaker() -> CircuitBreaker:
     config = CircuitBreakerConfig(
         failure_threshold=5,  # Higher threshold for FHIR server
         success_threshold=3,  # Higher success threshold for FHIR
-        timeout=settings.CIRCUIT_BREAKER_CONFIG['FHIR_TIMEOUT'],
-        exceptions=(Exception,)
+        timeout=settings.CIRCUIT_BREAKER_CONFIG["FHIR_TIMEOUT"],
+        exceptions=(Exception,),
     )
     return registry.get_breaker("fhir_server", config)
 
