@@ -24,7 +24,7 @@ jobs:
       - name: Install Poetry 2.2
         uses: snok/install-poetry@v1
         with:
-          version: 2.2.2
+          version: 2.2.1
           virtualenvs-create: false
           virtualenvs-in-project: false
 
