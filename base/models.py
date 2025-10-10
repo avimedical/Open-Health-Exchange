@@ -29,6 +29,8 @@ class Provider(models.Model):
     excluded_data_types: list = models.JSONField(default=list, help_text="Data types to exclude from sync (opt-out)")  # type: ignore[assignment]
     supports_webhooks: bool = models.BooleanField(default=True, help_text="Provider supports webhook subscriptions")  # type: ignore[assignment]
     webhook_enabled: bool = models.BooleanField(default=True, help_text="Enable webhook subscriptions for this provider")  # type: ignore[assignment]
+    success_deeplink_url: str = models.URLField(max_length=500, blank=True, null=True, help_text="Optional deeplink URL for mobile app success redirect (e.g., myapp://oauth/success/withings/)")  # type: ignore[assignment]
+    error_deeplink_url: str = models.URLField(max_length=500, blank=True, null=True, help_text="Optional deeplink URL for mobile app error redirect (e.g., myapp://oauth/error/withings/)")  # type: ignore[assignment]
 
     def __str__(self):
         return f"{self.name}"

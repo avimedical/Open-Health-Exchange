@@ -279,10 +279,33 @@ class InitiateProviderLinkingView(View):
                 'error': f'EHR user {ehr_user_id} not found'
             }, status=404)
 
+        # Get custom success/error URLs from query parameters (for mobile apps)
+        success_url = request.GET.get('success_url')
+        error_url = request.GET.get('error_url')
+
+        # If not provided via query params, check provider configuration
+        if not success_url or not error_url:
+            try:
+                provider_obj = Provider.objects.get(provider_type=provider, active=True)
+                success_url = success_url or provider_obj.success_deeplink_url
+                error_url = error_url or provider_obj.error_deeplink_url
+            except Provider.DoesNotExist:
+                logger.warning(f"Provider {provider} not found in database")
+
         # Store user context in session for the OAuth flow
         request.session['linking_ehr_user_id'] = ehr_user_id
         request.session['linking_provider'] = provider
         request.session['linking_timestamp'] = datetime.utcnow().isoformat()
+
+        # Store custom deeplink URLs if provided
+        if success_url:
+            request.session['linking_success_url'] = success_url
+            logger.info(f"Using custom success URL: {success_url}")
+
+        if error_url:
+            request.session['linking_error_url'] = error_url
+            logger.info(f"Using custom error URL: {error_url}")
+
         request.session.save()
 
         logger.info(f"Initiating {provider} OAuth linking for EHR user {ehr_user_id}")
@@ -346,21 +369,54 @@ def provider_linking_status(request, provider):
 class ProviderLinkSuccessView(View):
     """
     Success page shown after successful provider linking.
-    Mobile-optimized page that informs user about successful linking and ongoing sync.
+    Supports mobile app deeplinks for seamless integration.
     """
 
     def get(self, request):
         """
-        Display success page with provider information from session.
+        Display success page or redirect to mobile app deeplink if configured.
         """
         # Get provider information from session (stored during OAuth flow)
         provider = request.session.get('linking_provider', 'provider')
+        ehr_user_id = request.session.get('linking_ehr_user_id')
+        success_url = request.session.get('linking_success_url')
 
         # Clear the linking session data since we're done
         request.session.pop('linking_provider', None)
+        request.session.pop('linking_ehr_user_id', None)
         request.session.pop('linking_timestamp', None)
+        request.session.pop('linking_success_url', None)
+        request.session.pop('linking_error_url', None)
 
-        # Render the success template
+        # If deeplink URL is configured, redirect to mobile app
+        if success_url:
+            from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+
+            # Parse the deeplink URL
+            parsed = urlparse(success_url)
+
+            # Add provider and user info as query parameters
+            query_params = parse_qs(parsed.query)
+            query_params['provider'] = [provider]
+            if ehr_user_id:
+                query_params['ehr_user_id'] = [ehr_user_id]
+            query_params['status'] = ['success']
+
+            # Rebuild URL with updated query parameters
+            new_query = urlencode(query_params, doseq=True)
+            deeplink_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+
+            logger.info(f"Redirecting to mobile app success deeplink: {deeplink_url}")
+            return HttpResponseRedirect(deeplink_url)
+
+        # Otherwise, render the default success template
         return render(request, 'base/provider_link_success.html', {
             'provider': provider
         })
@@ -492,20 +548,66 @@ def trigger_device_sync(request, provider):
 class ProviderLinkErrorView(View):
     """
     Error page shown when provider linking fails.
-    Mobile-optimized page that explains the error and provides retry options.
+    Supports mobile app deeplinks with error details.
     """
 
     def get(self, request):
         """
-        Display error page with provider information from session.
+        Display error page or redirect to mobile app deeplink with error details.
         """
-        # Get provider information from session if available
+        # Get provider and error information from session/query params
         provider = request.session.get("linking_provider", "provider")
+        ehr_user_id = request.session.get("linking_ehr_user_id")
+        error_url = request.session.get("linking_error_url")
 
-        # Keep the session data for potential retry
-        # Don"t clear it like we do in success view
+        # Get error details from query parameters (set by OAuth error handler)
+        error_code = request.GET.get("error", "unknown_error")
+        error_message = request.GET.get("error_description", "Provider linking failed")
+
+        # If deeplink URL is configured, redirect to mobile app with error details
+        if error_url:
+            from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+
+            # Parse the deeplink URL
+            parsed = urlparse(error_url)
+
+            # Add provider, user info, and error details as query parameters
+            query_params = parse_qs(parsed.query)
+            query_params['provider'] = [provider]
+            if ehr_user_id:
+                query_params['ehr_user_id'] = [ehr_user_id]
+            query_params['status'] = ['error']
+            query_params['error'] = [error_code]
+            query_params['message'] = [error_message]
+
+            # Rebuild URL with updated query parameters
+            new_query = urlencode(query_params, doseq=True)
+            deeplink_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+
+            logger.info(f"Redirecting to mobile app error deeplink: {deeplink_url}")
+
+            # Clear session data after redirecting to error deeplink
+            request.session.pop('linking_provider', None)
+            request.session.pop('linking_ehr_user_id', None)
+            request.session.pop('linking_timestamp', None)
+            request.session.pop('linking_success_url', None)
+            request.session.pop('linking_error_url', None)
+
+            return HttpResponseRedirect(deeplink_url)
+
+        # Keep the session data for potential retry if no deeplink
+        # Don't clear it like we do in success view
 
         # Render the error template
         return render(request, "base/provider_link_error.html", {
-            "provider": provider
+            "provider": provider,
+            "error_code": error_code,
+            "error_message": error_message
         })

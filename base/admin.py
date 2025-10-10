@@ -170,6 +170,15 @@ class ProviderAdmin(admin.ModelAdmin):
             'fields': ('supports_webhooks', 'webhook_enabled'),
             'description': 'Configure webhook support for real-time data synchronization'
         }),
+        ('Mobile App Integration', {
+            'fields': ('success_deeplink_url', 'error_deeplink_url'),
+            'description': (
+                'Optional deeplink URLs for mobile app OAuth redirects. '
+                'If not set, users will see the default web success/error pages. '
+                'Example: myapp://oauth/success/withings/ or myapp://oauth/error/fitbit/'
+            ),
+            'classes': ('collapse',)
+        }),
         ('Data Type Configuration', {
             'fields': ('excluded_data_types', 'default_data_types'),
             'description': (
@@ -193,7 +202,8 @@ class ProviderAdmin(admin.ModelAdmin):
         if obj and obj.pk:
             # Create a deep copy to avoid mutating the original
             fieldsets = list(fieldsets)
-            data_type_section = list(fieldsets[2])
+            # Data Type Configuration is now at index 3 (after Mobile App Integration)
+            data_type_section = list(fieldsets[3])
             data_type_section_dict = dict(data_type_section[1])
 
             # Only add if not already present
@@ -201,7 +211,7 @@ class ProviderAdmin(admin.ModelAdmin):
             if 'effective_data_types_summary' not in current_fields:
                 data_type_section_dict['fields'] = current_fields + ('effective_data_types_summary',)
 
-            fieldsets[2] = (data_type_section[0], data_type_section_dict)
+            fieldsets[3] = (data_type_section[0], data_type_section_dict)
             fieldsets = tuple(fieldsets)
 
         return fieldsets
