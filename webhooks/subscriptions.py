@@ -51,9 +51,14 @@ class WebhookSubscriptionManager:
 
         Args:
             user_id: EHR user ID
-            data_types: List of data types to subscribe to
+            data_types: List of data types to subscribe to (e.g., ['ecg', 'heart_rate', 'weight'])
+
+        The method will automatically resolve which appli types to subscribe to based on
+        the requested data types using the centralized provider_mappings module.
         """
         try:
+            from ingestors.provider_mappings import resolve_subscription_categories, validate_data_types
+
             # Get user's access token
             social_auth = self._get_user_social_auth(user_id, Provider.WITHINGS)
             access_token = social_auth.access_token
@@ -62,10 +67,24 @@ class WebhookSubscriptionManager:
             url = "https://wbsapi.withings.net/notify"
             callback_url = f"{self.base_webhook_url}withings/"
 
-            # Map data types to Withings application IDs
-            appli_types = self._map_data_types_to_withings_appli(data_types or ['heart_rate', 'steps'])
+            # Validate and resolve subscription categories from data types
+            requested_data_types = data_types or ['heart_rate', 'steps']
+            supported, unsupported = validate_data_types(Provider.WITHINGS, requested_data_types)
+
+            if unsupported:
+                logger.warning(f"Unsupported Withings data types for user {user_id}: {unsupported}")
+
+            if not supported:
+                raise WebhookSubscriptionError(f"No supported data types provided: {requested_data_types}")
+
+            # Resolve appli types from supported data types
+            appli_types = [int(cat) for cat in resolve_subscription_categories(Provider.WITHINGS, supported)]
+            logger.info(f"Resolved data types {supported} to Withings appli types: {appli_types}")
 
             created_subscriptions = []
+            failed_appli_types = []
+            logger.info(f"Attempting to create Withings subscriptions for user {user_id} with appli types: {appli_types}")
+
             for appli in appli_types:
                 params = {
                     'action': 'subscribe',
@@ -76,10 +95,13 @@ class WebhookSubscriptionManager:
                 }
 
                 try:
+                    logger.info(f"Creating Withings subscription for user {user_id}, appli {appli} (callback: {callback_url})")
                     response = requests.post(url, params=params, timeout=settings.WEBHOOK_CONFIG['TIMEOUT'])
                     response.raise_for_status()
 
                     result = response.json()
+                    logger.info(f"Withings API response for appli {appli}: status={result.get('status')}, body={result}")
+
                     if result.get('status') == 0:  # Withings returns 0 for success
                         subscription = WebhookSubscription(
                             provider=Provider.WITHINGS,
@@ -89,15 +111,24 @@ class WebhookSubscriptionManager:
                             created_at=datetime.utcnow()
                         )
                         created_subscriptions.append(subscription)
-                        logger.info(f"Created Withings subscription for user {user_id}, appli {appli}")
+                        logger.info(f"✓ Successfully created Withings subscription for user {user_id}, appli {appli}")
                     else:
-                        logger.error(f"Withings subscription failed for appli {appli}: {result}")
+                        failed_appli_types.append(appli)
+                        logger.error(f"✗ Withings subscription failed for appli {appli}: status={result.get('status')}, error={result.get('error', 'Unknown error')}")
 
                 except requests.RequestException as e:
-                    logger.error(f"Failed to create Withings subscription for appli {appli}: {e}")
+                    failed_appli_types.append(appli)
+                    logger.error(f"✗ Failed to create Withings subscription for appli {appli}: {e}")
+
+            # Log summary
+            success_count = len(created_subscriptions)
+            failed_count = len(failed_appli_types)
+            logger.info(f"Withings subscription summary for user {user_id}: {success_count} succeeded, {failed_count} failed")
+            if failed_appli_types:
+                logger.warning(f"Failed appli types: {failed_appli_types}")
 
             if not created_subscriptions:
-                raise WebhookSubscriptionError("Failed to create any Withings subscriptions")
+                raise WebhookSubscriptionError(f"Failed to create any Withings subscriptions. Attempted appli types: {appli_types}")
 
             # Return the first subscription (could be extended to return all)
             return created_subscriptions[0]
@@ -298,21 +329,37 @@ class WebhookSubscriptionManager:
             raise WebhookSubscriptionError(f"User {user_id} not connected to {provider.value}: {e}")
 
     def _map_data_types_to_withings_appli(self, data_types: List[str]) -> List[int]:
-        """Map data types to Withings application IDs"""
+        """
+        DEPRECATED: Use ingestors.provider_mappings.resolve_subscription_categories() instead
+
+        This method is kept for backward compatibility but should not be used in new code.
+        All data type configuration is now centralized in provider_mappings.py
+
+        Official Withings API documentation:
+        https://developer.withings.com/developer-guide/v3/data-api/keep-user-data-up-to-date/
+        """
+        logger.warning("_map_data_types_to_withings_appli is deprecated, use provider_mappings module")
         mapping = {
-            'weight': [1],                    # Weight scale
-            'heart_rate': [4, 44],           # Activity + Heart rate
-            'steps': [4],                    # Activity data
-            'blood_pressure': [46],          # Blood pressure monitor
-            'ecg': [50],                     # ECG device
-            'temperature': [21],             # Temperature
-            'spo2': [54],                    # Oxygen saturation
-            'rr_intervals': [44]             # Heart rate variability
+            'weight': [1],                    # Appli 1: Weight-related metrics (weight, fat mass, muscle mass)
+            'fat_mass': [1],                  # Appli 1: Fat mass via body composition
+            'temperature': [2],               # Appli 2: Temperature-related data
+            'blood_pressure': [4],            # Appli 4: Pressure-related data (BP, heart pulse, SPO2)
+            'heart_rate': [4],                # Appli 4: Pressure-related data includes heart pulse
+            'spo2': [4],                      # Appli 4: Pressure-related data includes SPO2
+            'steps': [16],                    # Appli 16: Activity data (steps, distance, calories, workouts)
+            'sleep': [44],                    # Appli 44: Sleep-related data
+            'rr_intervals': [44],             # Appli 44: Sleep data includes RR intervals
+            'ecg': [54],                      # Appli 54: ECG data (FIXED: was 50, should be 54)
+            'glucose': [58],                  # Appli 58: Glucose data
         }
 
         appli_set = set()
         for data_type in data_types:
             if data_type in mapping:
                 appli_set.update(mapping[data_type])
+            else:
+                logger.warning(f"No Withings appli mapping found for data type: {data_type}")
 
-        return list(appli_set) if appli_set else [4]  # Default to activity data
+        result = list(appli_set) if appli_set else [4]  # Default to activity data
+        logger.info(f"Mapped data types {data_types} to Withings appli IDs: {result}")
+        return result

@@ -14,4 +14,7 @@ urlpatterns = [
     # Health check and monitoring endpoints
     path('health/', views.webhook_health_check, name='webhook-health'),
     path('metrics/', views.webhook_metrics_endpoint, name='webhook-metrics'),
+
+    # Debug endpoints
+    path('debug/withings/subscriptions/', views.debug_withings_subscriptions, name='debug-withings-subscriptions'),
 ]

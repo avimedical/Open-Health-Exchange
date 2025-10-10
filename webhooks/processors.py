@@ -44,20 +44,27 @@ class WebhookPayloadProcessor:
             user_id = str(payload['userid'])
             appli = int(payload['appli'])  # Convert to int for mapping lookup
 
-            # Map Withings application IDs to our data types
-            appli_mapping = {
-                1: [HealthDataType.WEIGHT],                           # Body measurements
-                4: [HealthDataType.STEPS, HealthDataType.HEART_RATE], # Activity
-                16: [],                                               # Sleep (not implemented)
-                44: [HealthDataType.HEART_RATE],                     # Heart rate only
-                50: [HealthDataType.ECG, HealthDataType.HEART_RATE], # ECG with HR
-                46: [HealthDataType.BLOOD_PRESSURE],                 # Blood pressure
-            }
+            # Use centralized provider mapping to resolve data types from appli type
+            from ingestors.provider_mappings import get_category_to_data_types_mapping, get_data_type_config
+            from ingestors.health_data_constants import Provider
 
-            data_types = appli_mapping.get(appli, [])
-            if not data_types:
-                logger.warning(f"Withings webhook with unsupported appli type: {appli}")
+            # Get mapping of appli types to data type names
+            category_mapping = get_category_to_data_types_mapping(Provider.WITHINGS)
+            data_type_names = category_mapping.get(str(appli), [])
+
+            if not data_type_names:
+                logger.warning(f"Withings webhook with unsupported appli type: {appli} (no data types configured)")
                 return []
+
+            # Convert data type names to HealthDataType enums
+            data_types = []
+            for data_type_name in data_type_names:
+                try:
+                    data_types.append(HealthDataType(data_type_name))
+                except ValueError:
+                    logger.warning(f"Unknown HealthDataType: {data_type_name}")
+
+            logger.info(f"Resolved Withings appli {appli} to data types: {[dt.value for dt in data_types]}")
 
             # Extract date range if provided
             date_range = None

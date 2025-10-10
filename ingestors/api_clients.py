@@ -298,40 +298,45 @@ class UnifiedHealthDataClient:
                 raise APIError(f"Unsupported Fitbit data type: {query.data_type}")
 
     def _get_withings_endpoint_info(self, data_type: HealthDataType) -> dict[str, Any]:
-        """Get Withings endpoint and parameters for data type"""
-        measure_types = self.config['ENDPOINTS']['withings']['measure_types']
+        """
+        Get Withings endpoint and parameters for data type using centralized configuration
 
-        match data_type:
-            case HealthDataType.HEART_RATE:
-                return {
-                    'endpoint': '/v2/measure',
-                    'params': {'action': 'getmeas', 'meastype': measure_types['heart_rate']}
-                }
-            case HealthDataType.WEIGHT:
-                return {
-                    'endpoint': '/v2/measure',
-                    'params': {'action': 'getmeas', 'meastype': measure_types['weight']}
-                }
-            case HealthDataType.STEPS:
-                return {
-                    'endpoint': '/v2/measure',
-                    'params': {'action': 'getactivity'}
-                }
-            case HealthDataType.SLEEP:
-                return {
-                    'endpoint': '/v2/sleep',
-                    'params': {'action': 'get'}
-                }
-            case HealthDataType.BLOOD_PRESSURE:
-                return {
-                    'endpoint': '/v2/measure',
-                    'params': {
-                        'action': 'getmeas',
-                        'meastype': f"{measure_types['systolic_bp']},{measure_types['diastolic_bp']}"
-                    }
-                }
-            case _:
-                raise APIError(f"Unsupported Withings data type: {data_type}")
+        This method now uses the provider_mappings module for all configuration,
+        ensuring consistency across subscription, webhook processing, and data fetching.
+        """
+        from .provider_mappings import get_data_type_config, Provider as ProviderEnum
+
+        # Get configuration from centralized mapping
+        config = get_data_type_config(ProviderEnum.WITHINGS, data_type.value)
+
+        if not config:
+            raise APIError(f"Unsupported Withings data type: {data_type.value}")
+
+        # Build endpoint info from configuration
+        endpoint_info = {
+            'endpoint': config.api_endpoint,
+            'params': {}
+        }
+
+        # Add action if specified
+        if config.api_action:
+            endpoint_info['params']['action'] = config.api_action
+
+        # Add meastype if specified (for /v2/measure endpoint)
+        if config.meastype is not None:
+            if isinstance(config.meastype, list):
+                # Multiple meastypes (e.g., blood pressure: systolic + diastolic)
+                endpoint_info['params']['meastype'] = ','.join(str(mt) for mt in config.meastype)
+            else:
+                # Single meastype
+                endpoint_info['params']['meastype'] = config.meastype
+
+        self.logger.debug(
+            f"Resolved Withings {data_type.value} to endpoint={config.api_endpoint}, "
+            f"params={endpoint_info['params']}"
+        )
+
+        return endpoint_info
 
     def _process_withings_response(self, data: dict[str, Any], data_type: HealthDataType) -> list[dict[str, Any]]:
         """Process Withings API response into standardized format"""
@@ -342,6 +347,8 @@ class UnifiedHealthDataClient:
                 return self._process_withings_activity(data)
             case HealthDataType.SLEEP:
                 return self._process_withings_sleep(data)
+            case HealthDataType.ECG:
+                return self._process_withings_ecg(data)
             case _:
                 return []
 
@@ -423,6 +430,76 @@ class UnifiedHealthDataClient:
                 'device_id': sleep_session.get('deviceid'),
                 'measurement_source': MeasurementSource.DEVICE
             })
+
+        return results
+
+    def _process_withings_ecg(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """
+        Process Withings ECG data from Heart v2 API
+
+        Response format:
+        {
+            "status": 0,
+            "body": {
+                "series": [
+                    {
+                        "deviceid": "...",
+                        "model": 94,
+                        "ecg": {
+                            "signalid": 557124430,
+                            "afib": 0  # 0=normal, 1=AFib detected, 2=inconclusive
+                        },
+                        "heart_rate": 71,
+                        "timestamp": 1752509738,
+                        "modified": 1752509778
+                    }
+                ]
+            }
+        }
+        """
+        results = []
+        ecg_series = data.get('body', {}).get('series', [])
+
+        # AFib classification mapping
+        afib_classification = {
+            0: "Normal sinus rhythm",
+            1: "Atrial fibrillation detected",
+            2: "Inconclusive"
+        }
+
+        for ecg_record in ecg_series:
+            ecg_data = ecg_record.get('ecg', {})
+
+            # Build standardized ECG record
+            record = {
+                'timestamp': datetime.fromtimestamp(ecg_record.get('timestamp', 0)),
+                'heart_rate': ecg_record.get('heart_rate'),
+                'device_id': ecg_record.get('deviceid'),
+                'device_model': ecg_record.get('model'),
+                'signal_id': ecg_data.get('signalid'),
+                'afib_result': ecg_data.get('afib'),
+                'afib_classification': afib_classification.get(ecg_data.get('afib', 2), 'Unknown'),
+                'modified': datetime.fromtimestamp(ecg_record.get('modified', 0)),
+                'measurement_source': MeasurementSource.DEVICE,
+                'data_type': HealthDataType.ECG
+            }
+
+            # Add QT intervals if available
+            if 'qrs' in ecg_data:
+                record['qrs_interval'] = ecg_data['qrs']
+            if 'pr' in ecg_data:
+                record['pr_interval'] = ecg_data['pr']
+            if 'qt' in ecg_data:
+                record['qt_interval'] = ecg_data['qt']
+            if 'qtc' in ecg_data:
+                record['qtc_interval'] = ecg_data['qtc']
+
+            results.append(record)
+
+            self.logger.info(
+                f"Processed ECG record: signal_id={record['signal_id']}, "
+                f"heart_rate={record['heart_rate']}, afib={record['afib_classification']}"
+            )
 
         return results
 

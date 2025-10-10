@@ -339,3 +339,115 @@ def webhook_metrics_endpoint(request):
             'error': str(e),
             'timestamp': datetime.utcnow().isoformat()
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def debug_withings_subscriptions(request):
+    """
+    Debug endpoint to check active Withings subscriptions for a user
+
+    Usage: GET /webhooks/debug/withings/subscriptions/?user_id=<ehr_user_id>
+    """
+    user_id = request.GET.get('user_id')
+
+    if not user_id:
+        return Response({
+            'error': 'Missing required parameter: user_id',
+            'usage': 'GET /webhooks/debug/withings/subscriptions/?user_id=<ehr_user_id>'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        from base.models import EHRUser
+        from social_django.models import UserSocialAuth
+        import requests
+
+        # Get user
+        try:
+            user = EHRUser.objects.get(ehr_user_id=user_id)
+        except EHRUser.DoesNotExist:
+            return Response({
+                'error': f'User not found: {user_id}'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Get Withings social auth
+        try:
+            social_auth = UserSocialAuth.objects.get(
+                user=user,
+                provider='withings'
+            )
+        except UserSocialAuth.DoesNotExist:
+            return Response({
+                'error': f'User {user_id} not connected to Withings',
+                'user_exists': True,
+                'withings_connected': False
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Get access token
+        access_token = social_auth.access_token
+
+        # Query Withings API for subscription list
+        url = "https://wbsapi.withings.net/notify"
+        params = {
+            'action': 'list',
+            'access_token': access_token
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+
+        result = response.json()
+
+        # Withings appli type mapping for reference
+        # Source: https://developer.withings.com/developer-guide/v3/data-api/keep-user-data-up-to-date/
+        appli_type_names = {
+            1: "Weight-related metrics (weight, fat mass, muscle mass)",
+            2: "Temperature-related data",
+            4: "Pressure-related data (blood pressure, heart pulse, SPO2)",
+            16: "Activity data (steps, distance, calories, workouts)",
+            44: "Sleep-related data",
+            46: "User profile actions",
+            50: "Bed in sleep event",
+            51: "Bed out sleep event",
+            52: "Sleep sensor inflation event",
+            53: "Device setup without account",
+            54: "ECG data",
+            55: "ECG measure failure event",
+            58: "Glucose data"
+        }
+
+        # Parse response
+        if result.get('status') == 0:
+            profiles = result.get('body', {}).get('profiles', [])
+
+            # Enrich subscription data with human-readable names
+            for profile in profiles:
+                appli = profile.get('appli')
+                profile['appli_name'] = appli_type_names.get(appli, f'Unknown ({appli})')
+
+            return Response({
+                'user_id': user_id,
+                'withings_connected': True,
+                'withings_user_id': social_auth.extra_data.get('userid'),
+                'subscriptions': profiles,
+                'subscription_count': len(profiles),
+                'appli_type_reference': appli_type_names,
+                'timestamp': datetime.utcnow().isoformat()
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'error': 'Withings API returned error',
+                'status': result.get('status'),
+                'result': result
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except requests.RequestException as e:
+        logger.error(f"Failed to query Withings subscriptions: {e}")
+        return Response({
+            'error': f'Failed to query Withings API: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"Unexpected error in debug endpoint: {e}", exc_info=True)
+        return Response({
+            'error': f'Unexpected error: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -83,18 +83,20 @@ PROVIDER_CONFIGS = {
         ],
         supports_webhooks=True,
         webhook_collection_types={
-            # Comprehensive Withings appli mappings
-            "heart_rate": ["4", "44"],     # Activity (4) + Heart rate (44)
-            "steps": ["4"],                # Activity data (4)
-            "weight": ["1"],               # Weight scale (1)
-            "blood_pressure": ["46"],      # Blood pressure monitor (46)
-            "ecg": ["50"],                 # ECG device (50)
-            "temperature": ["21"],         # Temperature (21)
-            "spo2": ["54"],               # Oxygen saturation (54)
-            "rr_intervals": ["44"],        # Heart rate variability (44)
-            "sleep": ["16"],               # Sleep (16)
-            "pulse_wave_velocity": ["60"], # Pulse wave velocity (60)
-            "fat_mass": ["1"]              # Fat mass via body composition from scale (1)
+            # Official Withings appli type mappings
+            # Source: https://developer.withings.com/developer-guide/v3/data-api/keep-user-data-up-to-date/
+            "weight": ["1"],               # Appli 1: Weight-related metrics (weight, fat mass, muscle mass)
+            "fat_mass": ["1"],             # Appli 1: Fat mass via body composition
+            "temperature": ["2"],          # Appli 2: Temperature-related data
+            "blood_pressure": ["4"],       # Appli 4: Pressure-related data (BP, heart pulse, SPO2)
+            "heart_rate": ["4"],           # Appli 4: Pressure-related data includes heart pulse
+            "spo2": ["4"],                 # Appli 4: Pressure-related data includes SPO2
+            "steps": ["16"],               # Appli 16: Activity data (steps, distance, calories, workouts)
+            "sleep": ["44"],               # Appli 44: Sleep-related data
+            "rr_intervals": ["44"],        # Appli 44: Sleep data includes RR intervals
+            "ecg": ["54"],                 # Appli 54: ECG data (FIXED: was 50, correct is 54)
+            "glucose": ["58"],             # Appli 58: Glucose data
+            "pulse_wave_velocity": ["4"]   # Appli 4: Likely part of pressure-related measurements
         }
     ),
     Provider.FITBIT: ProviderConfig(

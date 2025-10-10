@@ -1,5 +1,6 @@
 import logging
 import requests
+from typing import Any
 from social_core.backends.oauth import BaseOAuth2
 from social_core.exceptions import AuthStateMissing, AuthTokenError
 from django.core.exceptions import SuspiciousOperation
@@ -148,8 +149,7 @@ class WithingsOAuth2(BaseOAuth2):
             raise AuthTokenError(self, error_message)
 
         return response_json.get("body", {})
-
-    def refresh_token(self, refresh_token: str) -> dict | None:
+    def refresh_token(self, token: str, *args, **kwargs) -> dict[str, Any]:
         """Refresh Withings access token using refresh token"""
         try:
             key, secret = self.get_key_and_secret()
@@ -159,28 +159,28 @@ class WithingsOAuth2(BaseOAuth2):
                     "grant_type": "refresh_token",
                     "client_id": key,
                     "client_secret": secret,
-                    "refresh_token": refresh_token,
+                    "refresh_token": token,
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
 
             if response.status_code != 200:
                 logger.error(f"Withings token refresh failed: {response.status_code} - {response.text}")
-                return None
+                return {}
 
             response_json = response.json()
             if response_json.get("status") != 0:
                 error_message = response_json.get("error", "Unknown error")
                 logger.error(f"Withings token refresh error: {error_message}")
-                return None
+                return {}
 
             token_data = response_json.get("body", {})
             logger.info("Successfully refreshed Withings access token")
-            return token_data
+            return token_data if isinstance(token_data, dict) else {}
 
         except Exception as e:
             logger.error(f"Exception during Withings token refresh: {e}")
-            return None
+            return {}
 
 
 class FitbitOAuth2(BaseOAuth2):
@@ -362,8 +362,8 @@ class FitbitOAuth2(BaseOAuth2):
         # Clear state from session after validation
         self.strategy.session_set("fitbit_state", None)
         return request_state
-
-    def refresh_token(self, refresh_token: str) -> dict | None:
+    
+    def refresh_token(self, token: str, *args, **kwargs) -> dict[str, Any]:
         """Refresh Fitbit access token using refresh token"""
         try:
             key, secret = self.get_key_and_secret()
@@ -371,7 +371,7 @@ class FitbitOAuth2(BaseOAuth2):
                 self.ACCESS_TOKEN_URL,
                 data={
                     "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
+                    "refresh_token": token,
                 },
                 auth=(key, secret),
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
@@ -379,15 +379,15 @@ class FitbitOAuth2(BaseOAuth2):
 
             if response.status_code != 200:
                 logger.error(f"Fitbit token refresh failed: {response.status_code} - {response.text}")
-                return None
+                return {}
 
             token_data = response.json()
             logger.info("Successfully refreshed Fitbit access token")
-            return token_data
+            return token_data if isinstance(token_data, dict) else {}
 
         except Exception as e:
             logger.error(f"Exception during Fitbit token refresh: {e}")
-            return None
+            return {}
 
 
 class OidcAuthenticationBackend(OIDCAuthenticationBackend):

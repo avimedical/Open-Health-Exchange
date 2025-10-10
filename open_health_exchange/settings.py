@@ -237,7 +237,8 @@ API_CLIENT_CONFIG = {
             'activity': '/v2/measure',
             'weight': '/v2/measure',
             'sleep': '/v2/sleep',
-            'blood_pressure': '/v2/measure'
+            'blood_pressure': '/v2/measure',
+            'ecg': '/v2/heart'  # ECG uses Heart v2 API, not measure endpoint
         },
         'fitbit': {
             'heart_rate': 'activities/heart',
@@ -249,7 +250,7 @@ API_CLIENT_CONFIG = {
         }
     },
     'SUPPORTED_DATA_TYPES': {
-        'withings': ['heart_rate', 'steps', 'weight', 'blood_pressure'],
+        'withings': ['heart_rate', 'steps', 'weight', 'blood_pressure', 'ecg'],
         'fitbit': ['heart_rate', 'steps', 'weight', 'sleep', 'ecg', 'rr_intervals', 'hrv']
     }
 }

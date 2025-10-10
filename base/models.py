@@ -33,34 +33,51 @@ class Provider(models.Model):
     def __str__(self):
         return f"{self.name}"
 
-    def get_effective_data_types(self):
+    def get_available_data_types(self):
         """
-        Get effective data types for this provider, considering opt-out preferences.
-        Returns the provider's default data types minus any excluded types.
+        Get all data types supported by this provider from provider_mappings.
+
+        This is the complete list of what CAN be synchronized.
+        Returns empty list if provider type is invalid.
         """
-        from ingestors.constants import Provider as ProviderEnum, PROVIDER_CONFIGS
+        from ingestors.provider_mappings import get_supported_data_types, Provider as ProviderEnum
 
         try:
-            provider_enum = ProviderEnum(self.provider_type)
-            config = PROVIDER_CONFIGS.get(provider_enum)
-
-            if not config:
-                return []
-
-            # Start with provider config defaults or model overrides
-            if self.default_data_types:
-                data_types = self.default_data_types.copy()
-            else:
-                data_types = config.default_health_data_types.copy()
-
-            # Remove excluded data types (opt-out)
-            if self.excluded_data_types:
-                data_types = [dt for dt in data_types if dt not in self.excluded_data_types]
-
-            return data_types
-
-        except (ValueError, AttributeError):
+            # Provider enum values are uppercase (WITHINGS, FITBIT)
+            # but model provider_type is lowercase (withings, fitbit)
+            provider_enum = ProviderEnum[self.provider_type.upper()]
+            return get_supported_data_types(provider_enum)
+        except (ValueError, AttributeError, KeyError):
             return []
+
+    def get_default_data_types(self):
+        """
+        Get default data types for this provider.
+
+        For backward compatibility, checks model's default_data_types first,
+        then falls back to all available types from provider_mappings.
+        """
+        if self.default_data_types:
+            # Legacy: use explicitly configured defaults
+            return self.default_data_types.copy()
+
+        # New behavior: all available types are default
+        return self.get_available_data_types()
+
+    def get_effective_data_types(self):
+        """
+        Get effective data types for this provider after applying exclusions.
+
+        This is what WILL actually be synchronized.
+        Formula: defaults - exclusions
+        """
+        defaults = self.get_default_data_types()
+
+        # Remove excluded data types (opt-out)
+        if self.excluded_data_types:
+            return [dt for dt in defaults if dt not in self.excluded_data_types]
+
+        return defaults
 
     def is_webhook_enabled(self):
         """Check if webhooks are enabled for this provider"""
