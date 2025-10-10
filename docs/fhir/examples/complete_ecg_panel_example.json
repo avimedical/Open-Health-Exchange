@@ -1,0 +1,125 @@
+{
+  "resourceType": "Observation",
+  "id": "fitbit-ecg-panel-20240924-091245",
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "34534-8",
+        "display": "12 lead EKG panel"
+      }
+    ],
+    "text": "12-lead Electrocardiogram Panel"
+  },
+  "subject": {
+    "reference": "Patient/9f99f236-82f0-4fc9-a223-cf78330d64e2"
+  },
+  "effectiveDateTime": "2024-09-24T09:12:45Z",
+  "device": {
+    "reference": "Device/fitbit-sense-123456"
+  },
+  "component": [
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8601-7",
+            "display": "EKG impression"
+          }
+        ]
+      },
+      "valueString": "Normal Sinus Rhythm"
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8867-4",
+            "display": "Heart rate"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": 72.0,
+        "unit": "/min",
+        "system": "http://unitsofmeasure.org",
+        "code": "/min"
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "urn:oid:2.16.840.1.113883.6.24",
+            "code": "131329",
+            "display": "MDC_ECG_ELEC_POTL_I"
+          }
+        ]
+      },
+      "valueSampledData": {
+        "origin": {
+          "value": 2048,
+          "unit": "mV",
+          "system": "http://unitsofmeasure.org",
+          "code": "mV"
+        },
+        "interval": 4.0,
+        "intervalUnit": "ms",
+        "factor": 1.612,
+        "lowerLimit": -3300,
+        "upperLimit": 3300,
+        "dimensions": 1,
+        "codeMap": "mV",
+        "offsets": null,
+        "data": "2048 2051 2045 2058 2042 2065 2038 2072 2035 2078 2032 2083 2030 2087 2029 2090 2028 2092 2027 2093 2027 2093 2027 2092 2028 2090 2030 2087 2032 2083 2035 2078 2038 2072 2042 2065 2045 2058 2048 2051 2051 2045 2054 2038 2057 2032 2060 2026 2062 2020 2064 2015 2065 2010 2066 2006 2066 2002 2066 1999 2065 1996 2064 1994 2062 1992 2060 1991 2057 1990 2054 1990 2051 1991 2048 1992 2045 1994 2042 1996 2038 1999 2035 2002 2032 2006 2030 2010 2028 2015 2026 2020 2025 2026 2024 2032 2023 2038 2022 2045 2021 2051 2020 2058 2020 2065 2020 2072 2020 2078 2021 2083 2022 2087 2023 2090 2024 2092 2025 2093 2026 2093 2028 2092 2030 2090 2032 2087 2035 2083 2038 2078 2042 2072 2045 2065 2048 2058"
+      }
+    }
+  ],
+  "identifier": [
+    {
+      "use": "secondary",
+      "system": "https://api.fitbit.com/health-data",
+      "value": "ecg_2024-09-24T09:12:45Z_test-user"
+    }
+  ],
+  "meta": {
+    "source": "#fitbit",
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
+        "code": "fitbit",
+        "display": "Fitbit"
+      },
+      {
+        "system": "https://open-health-exchange.com/measurement-source",
+        "code": "device",
+        "display": "Device measurement"
+      }
+    ]
+  },
+  "note": [
+    {
+      "time": "2024-09-24T14:30:21Z",
+      "text": "Synced from Fitbit Health Platform. Technical info: Device: Fitbit Sense; Firmware: 1.2.3; Feature Version: 1.2.3-2.11-2.14; Sampling Frequency: 250 Hz"
+    }
+  ]
+}

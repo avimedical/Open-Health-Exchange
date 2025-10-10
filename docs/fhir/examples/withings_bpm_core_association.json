@@ -1,0 +1,77 @@
+{
+  "resourceType": "DeviceAssociation",
+  "id": "assoc-withings-12345-a1b2c3d4",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/StructureDefinition/DeviceAssociation"],
+    "lastUpdated": "2024-01-15T10:30:00Z"
+  },
+  "identifier": [
+    {
+      "use": "official",
+      "system": "https://open-health-exchange.com/device-associations",
+      "value": "assoc-withings-12345-a1b2c3d4"
+    },
+    {
+      "use": "secondary",
+      "system": "https://www.withings.com/device-associations",
+      "value": "12345"
+    }
+  ],
+  "device": {
+    "reference": "Device/device-withings-12345"
+  },
+  "subject": {
+    "reference": "Patient/11111111-2222-3333-4444-555555555555"
+  },
+  "status": "active",
+  "period": {
+    "start": "2024-01-15T08:45:00Z"
+  },
+  "operation": [
+    {
+      "status": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/ValueSet/deviceassociation-operationstatus",
+            "code": "attached",
+            "display": "Attached"
+          }
+        ]
+      }
+    }
+  ],
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/device-association-category",
+          "code": "cardiovascular-monitoring",
+          "display": "Cardiovascular Monitoring"
+        }
+      ],
+      "text": "Bp Monitor for personal health monitoring"
+    }
+  ],
+  "reason": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/device-association-reason",
+          "code": "patient-monitoring",
+          "display": "Patient Monitoring"
+        }
+      ],
+      "text": "Personal health monitoring via Withings platform"
+    }
+  ],
+  "bodySite": {
+    "coding": [
+      {
+        "system": "http://snomed.info/sct",
+        "code": "40983000",
+        "display": "Upper arm structure"
+      }
+    ],
+    "text": "Upper arm (for blood pressure measurement)"
+  }
+}

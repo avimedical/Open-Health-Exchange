@@ -1,0 +1,67 @@
+{
+  "resourceType": "Observation",
+  "id": "fitbit-steps-20240924-235900",
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "activity",
+          "display": "Activity"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "55423-8",
+        "display": "Number of steps in unspecified time Pedometer"
+      }
+    ],
+    "text": "Steps"
+  },
+  "subject": {
+    "reference": "Patient/9f99f236-82f0-4fc9-a223-cf78330d64e2"
+  },
+  "effectiveDateTime": "2024-09-24T23:59:00Z",
+  "device": {
+    "reference": "Device/fitbit-charge6-67890"
+  },
+  "valueQuantity": {
+    "value": 12847,
+    "unit": "steps",
+    "system": "http://unitsofmeasure.org",
+    "code": "1"
+  },
+  "identifier": [
+    {
+      "use": "secondary",
+      "system": "https://api.fitbit.com/health-data",
+      "value": "steps_2024-09-24T23:59:00_9f99f236-82f0-4fc9-a223-cf78330d64e2"
+    }
+  ],
+  "meta": {
+    "source": "#fitbit",
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
+        "code": "fitbit",
+        "display": "Fitbit"
+      }
+    ]
+  },
+  "note": [
+    {
+      "time": "2024-09-24T14:30:21Z",
+      "text": "Synced from Fitbit Health Platform. Metadata: {\"distance\": \"9.2km\", \"calories_burned\": 567}"
+    }
+  ]
+}

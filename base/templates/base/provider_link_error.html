@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Link Error - Open Health Exchange</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .error-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+            padding: 40px 30px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .error-mark {
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        .error-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .error-message {
+            font-size: 16px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .error-details {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 24px 0;
+            border-left: 4px solid #e74c3c;
+            text-align: left;
+        }
+
+        .retry-button {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 8px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .retry-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(231, 76, 60, 0.3);
+        }
+
+        .cancel-button {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .cancel-button:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            .error-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .error-title {
+                font-size: 24px;
+            }
+
+            .retry-button, .cancel-button {
+                width: 100%;
+                margin: 8px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">
+            <div class="error-mark">✕</div>
+        </div>
+
+        <h1 class="error-title">
+            Provider Link Failed
+        </h1>
+
+        <p class="error-message">
+            We encountered an issue while trying to connect your {{ provider|default:"provider" }} account.
+            This may be due to a temporary connection issue or cancelled authorization.
+        </p>
+
+        <div class="error-details">
+            <strong>Common reasons:</strong><br>
+            • Authorization was cancelled or denied<br>
+            • Network connection issue<br>
+            • Provider service temporarily unavailable<br>
+            • Invalid or expired credentials
+        </div>
+
+        <a href="javascript:history.back()" class="retry-button">
+            Try Again
+        </a>
+        <button class="cancel-button" onclick="window.close() || history.back()">
+            Close
+        </button>
+    </div>
+
+    <script>
+        // Auto-close after 60 seconds if this is a popup window
+        if (window.opener) {
+            setTimeout(() => {
+                window.close();
+            }, 60000);
+        }
+    </script>
+</body>
+</html>

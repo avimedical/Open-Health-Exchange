@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "anthropic.claude-code",
+        "github.vscode-github-actions",
+        "vstirbu.vscode-mermaid-preview",
+        "ms-python.mypy-type-checker"
+    ]
+}

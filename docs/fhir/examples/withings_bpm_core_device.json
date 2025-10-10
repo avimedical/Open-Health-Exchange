@@ -1,0 +1,142 @@
+{
+  "resourceType": "Device",
+  "id": "device-withings-12345",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/StructureDefinition/Device"],
+    "lastUpdated": "2024-01-15T10:30:00Z"
+  },
+  "identifier": [
+    {
+      "use": "official",
+      "system": "https://www.withings.com/devices",
+      "value": "12345",
+      "assigner": {
+        "display": "Withings Health Platform"
+      }
+    },
+    {
+      "use": "secondary",
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+          "code": "SNO",
+          "display": "Serial Number"
+        }]
+      },
+      "value": "WBP123456789"
+    }
+  ],
+  "status": "active",
+  "statusReason": [
+    {
+      "coding": [{
+        "system": "http://terminology.hl7.org/CodeSystem/device-status-reason",
+        "code": "online",
+        "display": "Online"
+      }]
+    }
+  ],
+  "manufacturer": "Withings",
+  "modelNumber": "BPM Core",
+  "serialNumber": "WBP123456789",
+  "type": [
+    {
+      "coding": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "43770009",
+          "display": "Sphygmomanometer, device"
+        }
+      ],
+      "text": "Sphygmomanometer, device"
+    }
+  ],
+  "version": [
+    {
+      "type": {
+        "text": "Firmware"
+      },
+      "value": "v2.1.3"
+    }
+  ],
+  "capability": [
+    {
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/device-capability",
+          "code": "blood-pressure-measurement"
+        }],
+        "text": "Blood Pressure Measurement"
+      },
+      "description": [{"text": "Automatic oscillometric blood pressure measurement"}]
+    }
+  ],
+  "property": [
+    {
+      "type": {"text": "Measurement Range"},
+      "valueRange": {
+        "low": {"value": 20, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"},
+        "high": {"value": 300, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"}
+      }
+    },
+    {
+      "type": {"text": "Battery Level"},
+      "valueQuantity": {
+        "value": 85,
+        "unit": "%",
+        "system": "http://unitsofmeasure.org",
+        "code": "%"
+      }
+    },
+    {
+      "type": {"text": "Last Sync"},
+      "valueDateTime": "2024-01-15T08:45:00Z"
+    },
+    {
+      "type": {"text": "Connectivity"},
+      "valueCodeableConcept": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/device-property",
+          "code": "wireless"
+        }],
+        "text": "Withings Cloud Sync"
+      }
+    }
+  ],
+  "name": [
+    {
+      "value": "BPM Core",
+      "type": "model-name"
+    },
+    {
+      "value": "John's Blood Pressure Monitor",
+      "type": "user-friendly-name"
+    }
+  ],
+  "owner": {
+    "reference": "Patient/11111111-2222-3333-4444-555555555555"
+  },
+  "location": {
+    "display": "Patient's Home"
+  },
+  "endpoint": [
+    {
+      "display": "Withings API"
+    }
+  ],
+  "safety": [
+    {
+      "coding": [{
+        "system": "urn:oid:2.16.840.1.113883.3.26.1.1",
+        "code": "N",
+        "display": "Not MRI Safe"
+      }]
+    }
+  ],
+  "note": [
+    {
+      "time": "2024-01-15T10:30:00Z",
+      "text": "Device synced from Withings Health Platform"
+    }
+  ]
+}
