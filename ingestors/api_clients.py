@@ -871,7 +871,8 @@ class UnifiedHealthDataClient:
         if not refresh_token:
             raise TokenExpiredError("No refresh token available")
 
-        token_url = self.config['ENDPOINTS']['withings']['token_url']
+        base_url = self.config['ENDPOINTS']['withings']['base_url']
+        token_url = base_url.rstrip('/') + '/v2/oauth2'
         data = {
             'action': 'requesttoken',
             'grant_type': 'refresh_token',
