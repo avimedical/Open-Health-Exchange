@@ -4,7 +4,7 @@ DeviceAssociation Publisher for managing FHIR DeviceAssociation resources
 
 import logging
 from datetime import UTC
-from typing import Any
+from typing import Any, cast
 
 from django.utils import dateparse
 from django.utils import timezone as django_timezone
@@ -49,13 +49,18 @@ class DeviceAssociationPublisher:
 
             if existing_association:
                 # Update existing association
-                association_resource = self.fhir_client.update_resource(
-                    "DeviceAssociation", existing_association["id"], fhir_association
+                association_resource = cast(
+                    dict[str, Any],
+                    self.fhir_client.update_resource(
+                        "DeviceAssociation", existing_association["id"], fhir_association
+                    ),
                 )
                 logger.info(f"Updated device association {association_resource['id']}")
             else:
                 # Create new association
-                association_resource = self.fhir_client.create_resource("DeviceAssociation", fhir_association)
+                association_resource = cast(
+                    dict[str, Any], self.fhir_client.create_resource("DeviceAssociation", fhir_association)
+                )
                 logger.info(f"Created new device association {association_resource['id']}")
 
             # Cache the association mapping (disabled temporarily)
@@ -148,8 +153,11 @@ class DeviceAssociationPublisher:
             deactivated_association["period"]["end"] = end_date or (django_timezone.now().isoformat() + "Z")
 
             # Update on FHIR server
-            association_resource = self.fhir_client.update_resource(
-                "DeviceAssociation", existing_association["id"], deactivated_association
+            association_resource = cast(
+                dict[str, Any],
+                self.fhir_client.update_resource(
+                    "DeviceAssociation", existing_association["id"], deactivated_association
+                ),
             )
 
             # Update cache
@@ -220,7 +228,10 @@ class DeviceAssociationPublisher:
             cached_association_id = self._get_cached_association_id(provider, provider_device_id)
             if cached_association_id:
                 try:
-                    association = self.fhir_client.get_resource("DeviceAssociation", cached_association_id)
+                    association = cast(
+                        dict[str, Any],
+                        self.fhir_client.get_resource("DeviceAssociation", cached_association_id),
+                    )
                     # Verify it's for the right patient
                     if association.get("subject", {}).get("reference") == patient_reference:
                         return association
@@ -233,12 +244,12 @@ class DeviceAssociationPublisher:
 
             params = {"subject": patient_reference, "identifier": f"{provider_system}|{provider_device_id}"}
 
-            bundle = self.fhir_client.search_resource("DeviceAssociation", params)
+            bundle = cast(dict[str, Any], self.fhir_client.search_resource("DeviceAssociation", params))
 
             if bundle.get("total", 0) > 0:
                 entries = bundle.get("entry", [])
                 if entries:
-                    association = entries[0].get("resource")
+                    association = cast(dict[str, Any], entries[0].get("resource"))
                     # Cache the result
                     self._cache_association_mapping(
                         type("DeviceData", (), {"provider": provider, "provider_device_id": provider_device_id})(),
@@ -362,7 +373,8 @@ class DeviceAssociationPublisher:
 
         for identifier in association.get("identifier", []):
             if identifier.get("system") == provider_system and identifier.get("use") == "secondary":
-                return identifier.get("value")
+                value = identifier.get("value")
+                return cast(str, value) if value else None
 
         return None
 

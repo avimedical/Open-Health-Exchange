@@ -245,10 +245,7 @@ def ensure_webhook_subscriptions(user_id: str, provider_name: str, data_types: l
                 subscription_manager.create_fitbit_subscription(user_id, collection_types=list(all_collection_types))
                 logger.info(f"Successfully ensured Fitbit subscriptions for user {user_id}")
 
-            else:
-                error_msg = f"Webhook subscription creation not implemented for provider {provider_name}"
-                logger.error(error_msg)
-                return {"error": error_msg, "success": False}
+            # No else needed: unsupported providers are rejected earlier when constructing the Provider enum.
 
             # Update provider link with subscription info
             try:
