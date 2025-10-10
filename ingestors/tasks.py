@@ -103,12 +103,12 @@ def nightly_device_sync() -> list[dict]:
         try:
             # Validate provider is supported
             if link.provider.provider_type not in [p.value for p in Provider]:
-                logger.warning(f"Unsupported provider {link.provider.provider_type} for link {link.id}")
+                logger.warning(f"Unsupported provider {link.provider.provider_type} for link {link.pk}")
                 continue
 
             # Check for access token
             if not link.extra_data or "access_token" not in link.extra_data:
-                logger.warning(f"No access token found for provider link {link.id}")
+                logger.warning(f"No access token found for provider link {link.pk}")
                 continue
 
             # Queue device sync task
@@ -119,12 +119,12 @@ def nightly_device_sync() -> list[dict]:
 
         except Exception as e:
             error_result = {
-                "error": f"Error processing provider link {link.id}: {e}",
+                "error": f"Error processing provider link {link.pk}: {e}",
                 "success": False,
-                "link_id": link.id,
+                "link_id": link.pk,
             }
             sync_results.append(error_result)
-            logger.error(f"Error processing provider link {link.id}: {e}")
+            logger.error(f"Error processing provider link {link.pk}: {e}")
 
     logger.info(f"Nightly device sync completed. Processed {len(sync_results)} provider links")
     return sync_results
@@ -150,7 +150,7 @@ def _update_provider_link_sync_info(user: EHRUser, provider: Provider, result) -
                 }
             )
             provider_link.save()
-            logger.info(f"Updated provider link {provider_link.id} with sync information")
+            logger.info(f"Updated provider link {provider_link.pk} with sync information")
 
     except Exception as e:
         logger.error(f"Failed to update provider link: {e}")
@@ -266,7 +266,7 @@ def ensure_webhook_subscriptions(user_id: str, provider_name: str, data_types: l
                         }
                     )
                     provider_link.save()
-                    logger.debug(f"Updated provider link {provider_link.id} with subscription info")
+                    logger.debug(f"Updated provider link {provider_link.pk} with subscription info")
 
             except Exception as e:
                 logger.warning(f"Could not update provider link with subscription info: {e}")

@@ -186,7 +186,8 @@ class WithingsApiAdapter:
         """Fetch devices from Withings API"""
         try:
             response = self.client.user_get_device()
-            return response.devices
+            devices: list = response.devices
+            return devices
         except Exception as e:
             raise APIError(f"Withings API error: {e}") from e
 
@@ -203,7 +204,8 @@ class FitbitApiAdapter:
             profile = self.client.user_profile_get()
             if not profile or "user" not in profile:
                 return []
-            return profile["user"].get("devices", [])
+            devices: list[dict] = profile["user"].get("devices", [])
+            return devices
         except Exception as e:
             if "expired" in str(e).lower() or "invalid" in str(e).lower():
                 raise AuthenticationError("Access token expired or invalid")

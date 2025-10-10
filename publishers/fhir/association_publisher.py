@@ -3,9 +3,11 @@ DeviceAssociation Publisher for managing FHIR DeviceAssociation resources
 """
 
 import logging
+from datetime import UTC
 from typing import Any
 
-from django.utils import dateparse, timezone
+from django.utils import dateparse
+from django.utils import timezone as django_timezone
 
 from ingestors.constants import DeviceData
 from transformers.fhir_transformers import DeviceAssociationTransformer
@@ -143,7 +145,7 @@ class DeviceAssociationPublisher:
             # Update period end date
             if "period" not in deactivated_association:
                 deactivated_association["period"] = {}
-            deactivated_association["period"]["end"] = end_date or (timezone.now().isoformat() + "Z")
+            deactivated_association["period"]["end"] = end_date or (django_timezone.now().isoformat() + "Z")
 
             # Update on FHIR server
             association_resource = self.fhir_client.update_resource(
@@ -313,11 +315,11 @@ class DeviceAssociationPublisher:
                 "recent_associations": 0,  # Active in last 30 days
             }
 
-            now = timezone.now()
+            now = django_timezone.now()
             thirty_days_ago = (
-                timezone.now().replace(day=now.day - 30)
+                django_timezone.now().replace(day=now.day - 30)
                 if now.day > 30
-                else timezone.now().replace(month=now.month - 1)
+                else django_timezone.now().replace(month=now.month - 1)
             )
 
             for association in associations:
@@ -339,9 +341,9 @@ class DeviceAssociationPublisher:
                         start_date = dateparse.parse_datetime(period["start"])
                         if start_date:
                             start_date = (
-                                start_date.astimezone(timezone.utc)
+                                start_date.astimezone(UTC)
                                 if start_date.tzinfo
-                                else start_date.replace(tzinfo=timezone.utc)
+                                else start_date.replace(tzinfo=UTC)
                             )
                             if start_date >= thirty_days_ago:
                                 stats["recent_associations"] += 1

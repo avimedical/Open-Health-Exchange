@@ -9,11 +9,12 @@ import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
-from django.utils import dateparse, timezone
+from django.utils import dateparse
+from django.utils import timezone as django_timezone
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -386,7 +387,7 @@ class UnifiedHealthDataClient:
                 if matches_requested_type:
                     results.append(
                         {
-                            "timestamp": datetime.fromtimestamp(group.get("date", 0), tz=timezone.utc),
+                            "timestamp": datetime.fromtimestamp(group.get("date", 0), tz=UTC),
                             "value": float(value),
                             "device_id": group.get("deviceid"),
                             "measurement_id": group.get("grpid"),
@@ -408,7 +409,7 @@ class UnifiedHealthDataClient:
             if date_str:
                 parsed_date = dateparse.parse_date(date_str)
                 if parsed_date:
-                    parsed_date = datetime.combine(parsed_date, datetime.min.time(), tzinfo=timezone.utc)
+                    parsed_date = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
             results.append(
                 {
                     "date": parsed_date,
@@ -431,8 +432,8 @@ class UnifiedHealthDataClient:
         for sleep_session in sleep_series:
             results.append(
                 {
-                    "timestamp": datetime.fromtimestamp(sleep_session.get("startdate", 0), tz=timezone.utc),
-                    "end_timestamp": datetime.fromtimestamp(sleep_session.get("enddate", 0), tz=timezone.utc),
+                    "timestamp": datetime.fromtimestamp(sleep_session.get("startdate", 0), tz=UTC),
+                    "end_timestamp": datetime.fromtimestamp(sleep_session.get("enddate", 0), tz=UTC),
                     "duration": sleep_session.get("data", {}).get("totalsleepduration", 0),
                     "deep_sleep_duration": sleep_session.get("data", {}).get("deepsleepduration", 0),
                     "light_sleep_duration": sleep_session.get("data", {}).get("lightsleepduration", 0),
@@ -480,14 +481,14 @@ class UnifiedHealthDataClient:
 
             # Build standardized ECG record
             record = {
-                "timestamp": datetime.fromtimestamp(ecg_record.get("timestamp", 0), tz=timezone.utc),
+                "timestamp": datetime.fromtimestamp(ecg_record.get("timestamp", 0), tz=UTC),
                 "heart_rate": ecg_record.get("heart_rate"),
                 "device_id": ecg_record.get("deviceid"),
                 "device_model": ecg_record.get("model"),
                 "signal_id": ecg_data.get("signalid"),
                 "afib_result": ecg_data.get("afib"),
                 "afib_classification": afib_classification.get(ecg_data.get("afib", 2), "Unknown"),
-                "modified": datetime.fromtimestamp(ecg_record.get("modified", 0), tz=timezone.utc),
+                "modified": datetime.fromtimestamp(ecg_record.get("modified", 0), tz=UTC),
                 "measurement_source": MeasurementSource.DEVICE,
                 "data_type": HealthDataType.ECG,
             }
@@ -533,7 +534,7 @@ class UnifiedHealthDataClient:
                         if "value" in daily_data and "restingHeartRate" in daily_data["value"]:
                             parsed_date = dateparse.parse_date(daily_data["dateTime"])
                             if parsed_date:
-                                timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=timezone.utc)
+                                timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
                                 results.append(
                                     {
                                         "timestamp": timestamp,
@@ -568,7 +569,7 @@ class UnifiedHealthDataClient:
             for daily_data in steps_response["activities-steps"]:
                 parsed_date = dateparse.parse_date(daily_data["dateTime"])
                 if parsed_date:
-                    date_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=timezone.utc)
+                    date_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
                     results.append(
                         {
                             "date": date_timestamp,
@@ -606,14 +607,14 @@ class UnifiedHealthDataClient:
                             timestamp_dt = dateparse.parse_datetime(f"{entry_date} {entry_time}")
                             if timestamp_dt:
                                 timestamp = (
-                                    timestamp_dt.replace(tzinfo=timezone.utc)
+                                    timestamp_dt.replace(tzinfo=UTC)
                                     if timestamp_dt.tzinfo is None
-                                    else timestamp_dt.astimezone(timezone.utc)
+                                    else timestamp_dt.astimezone(UTC)
                                 )
                             else:
-                                timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=timezone.utc)
+                                timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
                         except ValueError:
-                            timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=timezone.utc)
+                            timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
 
                         # Get measurement source
                         fitbit_source = weight_entry.get("source", "")
@@ -669,20 +670,20 @@ class UnifiedHealthDataClient:
                             sleep_end = dateparse.parse_datetime(end_time_str)
                             if sleep_start:
                                 sleep_start = (
-                                    sleep_start.astimezone(timezone.utc)
+                                    sleep_start.astimezone(UTC)
                                     if sleep_start.tzinfo
-                                    else sleep_start.replace(tzinfo=timezone.utc)
+                                    else sleep_start.replace(tzinfo=UTC)
                                 )
                             if sleep_end:
                                 sleep_end = (
-                                    sleep_end.astimezone(timezone.utc)
+                                    sleep_end.astimezone(UTC)
                                     if sleep_end.tzinfo
-                                    else sleep_end.replace(tzinfo=timezone.utc)
+                                    else sleep_end.replace(tzinfo=UTC)
                                 )
                             if not sleep_start or not sleep_end:
                                 raise ValueError("Could not parse sleep times")
                         except (ValueError, TypeError):
-                            sleep_start = datetime.combine(current_date, datetime.min.time(), tzinfo=timezone.utc)
+                            sleep_start = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
                             sleep_end = sleep_start + timedelta(hours=8)
 
                         # Get measurement source
@@ -748,14 +749,14 @@ class UnifiedHealthDataClient:
                         ecg_timestamp = dateparse.parse_datetime(start_time_str)
                         if ecg_timestamp:
                             ecg_timestamp = (
-                                ecg_timestamp.astimezone(timezone.utc)
+                                ecg_timestamp.astimezone(UTC)
                                 if ecg_timestamp.tzinfo
-                                else ecg_timestamp.replace(tzinfo=timezone.utc)
+                                else ecg_timestamp.replace(tzinfo=UTC)
                             )
                         else:
-                            ecg_timestamp = timezone.now()
+                            ecg_timestamp = django_timezone.now()
                     except (ValueError, TypeError):
-                        ecg_timestamp = timezone.now()
+                        ecg_timestamp = django_timezone.now()
 
                     results.append(
                         {
@@ -815,14 +816,14 @@ class UnifiedHealthDataClient:
                             hrv_timestamp = dateparse.parse_datetime(minute_str)
                             if hrv_timestamp:
                                 hrv_timestamp = (
-                                    hrv_timestamp.astimezone(timezone.utc)
+                                    hrv_timestamp.astimezone(UTC)
                                     if hrv_timestamp.tzinfo
-                                    else hrv_timestamp.replace(tzinfo=timezone.utc)
+                                    else hrv_timestamp.replace(tzinfo=UTC)
                                 )
                             else:
-                                hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=timezone.utc)
+                                hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
                         except (ValueError, TypeError):
-                            hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=timezone.utc)
+                            hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
 
                         rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
 
