@@ -24,8 +24,7 @@ except ImportError:
 if TYPE_CHECKING:
     from fitbit import Fitbit as FitbitClient  # pragma: no cover
 else:
-    class FitbitClient:  # runtime placeholder for type checking
-        ...
+    FitbitClient = Any  # runtime placeholder for type checking
 
 from django.conf import settings
 from social_django.models import UserSocialAuth
