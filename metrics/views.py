@@ -81,23 +81,16 @@ class HealthCheckView(View):
 
         # Huey health check
         try:
-            from huey import RedisHuey
             from django.conf import settings
+            import redis
 
-            if hasattr(settings, 'HUEY') and 'connection' in settings.HUEY:
-                import redis
-                redis_client = redis.Redis.from_url(settings.HUEY['connection']['url'])
-                huey_start = time.time()
-                redis_client.ping()
-                health_status['checks']['huey'] = {
-                    'status': 'healthy',
-                    'response_time_ms': round((time.time() - huey_start) * 1000, 2)
-                }
-            else:
-                health_status['checks']['huey'] = {
-                    'status': 'skipped',
-                    'message': 'Huey not configured'
-                }
+            redis_client = redis.Redis(connection_pool=settings.HUEY.storage.conn)
+            huey_start = time.time()
+            redis_client.ping()
+            health_status['checks']['huey'] = {
+                'status': 'healthy',
+                'response_time_ms': round((time.time() - huey_start) * 1000, 2)
+            }
         except Exception as e:
             logger.warning(f"Huey health check failed: {e}")
             health_status['checks']['huey'] = {

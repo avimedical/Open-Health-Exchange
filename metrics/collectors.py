@@ -219,12 +219,10 @@ class MetricsCollector:
 
             # Huey queue size (approximation via Redis)
             try:
-                from huey import RedisHuey
                 from django.conf import settings
-                if hasattr(settings, 'HUEY') and 'connection' in settings.HUEY:
-                    redis_client = redis.Redis.from_url(settings.HUEY['connection']['url'])
-                    queue_size = redis_client.llen('huey.default')
-                    HUEY_QUEUE_SIZE.set(queue_size)
+                redis_client = redis.Redis(connection_pool=settings.HUEY.storage.conn)
+                queue_size = redis_client.llen('huey.default')
+                HUEY_QUEUE_SIZE.set(queue_size)
             except Exception:
                 pass
 
