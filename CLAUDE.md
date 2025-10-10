@@ -92,7 +92,7 @@ python test_health_sync_phase1.py    # Test Phase 1 health sync
 - `GET /api/base/sync/status/` - Check synchronization status for users
 - `GET /api/base/sync/providers/` - List connected providers for a user
 - `POST /api/base/sync/trigger_device_sync/` - Trigger device sync (admin/testing)
-- `GET /api/base/link/{provider}/` - Initiate OAuth2 provider linking
+- `GET /api/base/link/{provider}/` - Initiate OAuth2 provider linking (supports mobile deeplinks)
 - `GET /api/base/link/{provider}/status/` - Check provider connection status
 
 #### Webhook Endpoints (`/webhooks/`)
@@ -113,6 +113,15 @@ python test_health_sync_phase1.py    # Test Phase 1 health sync
 - OIDC integration for EHR system authentication
 - No new user creation - only account linking for existing EHR users
 - DRF built-in authentication, permissions, and throttling
+
+### Mobile App Integration (Deeplinks)
+- **Deeplink Support**: OAuth success/error redirects to mobile apps via custom URL schemes
+- **Configuration**: Per-provider deeplink URLs in Provider model (`success_deeplink_url`, `error_deeplink_url`)
+- **Per-Request Override**: Query parameters `success_url` and `error_url` for dynamic deeplinks
+- **Success Flow**: Redirects to `myapp://oauth/success/{provider}/?provider=X&ehr_user_id=Y&status=success`
+- **Error Flow**: Redirects to `myapp://oauth/error/{provider}/?error=code&message=details&status=error`
+- **Fallback**: Default web pages if no deeplinks configured (backward compatible)
+- **Documentation**: See `docs/mobile-deeplinks.md` for iOS, Android, and React Native examples
 
 ### Security & Error Handling
 - Django REST Framework built-in security features

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django import forms
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.core.exceptions import ValidationError
 
 from base.models import EHRUser, Provider
@@ -94,7 +95,7 @@ class ProviderAdminForm(forms.ModelForm):
                 self.fields['default_data_types'].required = False
                 self.fields['default_data_types'].widget = forms.HiddenInput()
 
-            except (ValueError, AttributeError) as e:
+            except (ValueError, AttributeError):
                 # If provider_type is invalid, fall back to default behavior
                 pass
         else:
@@ -216,6 +217,7 @@ class ProviderAdmin(admin.ModelAdmin):
 
         return fieldsets
 
+    @admin.display(description='Active Data Types')
     def effective_data_types_count(self, obj):
         """Show count of effective data types in list view"""
         if not obj.pk:
@@ -227,8 +229,7 @@ class ProviderAdmin(admin.ModelAdmin):
         except Exception:
             return 'Error'
 
-    effective_data_types_count.short_description = 'Active Data Types'
-
+    @admin.display(description='Synchronization Summary')
     def effective_data_types_summary(self, obj):
         """Show detailed summary of effective data types"""
         if not obj.pk:
@@ -238,7 +239,6 @@ class ProviderAdmin(admin.ModelAdmin):
             from ingestors.provider_mappings import get_data_type_config, Provider as ProviderEnum
 
             provider_enum = ProviderEnum[obj.provider_type.upper()]
-            available = obj.get_available_data_types()
             excluded = obj.excluded_data_types
             effective = obj.get_effective_data_types()
 
@@ -279,12 +279,9 @@ class ProviderAdmin(admin.ModelAdmin):
                 html_parts.append('</ul>')
                 html_parts.append('</div>')
 
-            return format_html(''.join(html_parts))
+            return mark_safe(''.join(html_parts))
 
         except Exception as e:
             return format_html('<p style="color: red;">Error: {}</p>', str(e))
-
-    effective_data_types_summary.short_description = 'Synchronization Summary'
-
 
 admin.site.register(EHRUser)
