@@ -88,6 +88,9 @@ class TestProviderConfig:
             api_base_url="https://api.test.com",
             device_endpoint="/devices",
             device_types_map={"Scale": DeviceType.SCALE},
+            default_health_data_types=["heart_rate", "steps"],
+            supports_webhooks=True,
+            webhook_collection_types=["activities", "body"],
         )
 
         assert config.name == Provider.WITHINGS
@@ -96,6 +99,8 @@ class TestProviderConfig:
         assert config.api_base_url == "https://api.test.com"
         assert config.device_endpoint == "/devices"
         assert config.device_types_map["Scale"] == DeviceType.SCALE
+        assert config.default_health_data_types == ["heart_rate", "steps"]
+        assert config.supports_webhooks is True
 
     def test_provider_config_frozen(self):
         """Test that ProviderConfig is immutable"""
@@ -106,6 +111,9 @@ class TestProviderConfig:
             api_base_url="https://api.test.com",
             device_endpoint="/devices",
             device_types_map={},
+            default_health_data_types=[],
+            supports_webhooks=False,
+            webhook_collection_types=[],
         )
 
         with pytest.raises(Exception):  # Should be frozen

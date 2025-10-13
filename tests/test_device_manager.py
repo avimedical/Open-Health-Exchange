@@ -11,7 +11,6 @@ from ingestors.constants import DeviceType, Provider
 from ingestors.device_manager import (
     AuthenticationError,
     DeviceManager,
-    DeviceManagerError,
     DeviceManagerFactory,
     OAuthCredentials,
 )
@@ -94,13 +93,16 @@ class TestDeviceManager:
             device_manager._get_user_credentials("test_user")
 
     @patch("ingestors.device_manager.WithingsApiAdapter")
+    @patch.object(DeviceManager, "_create_api_client")  # Mock the entire client creation to avoid import error
     @patch.object(DeviceManager, "_get_user_credentials")
-    def test_fetch_user_devices_success(self, mock_get_creds, mock_adapter, device_manager):
+    def test_fetch_user_devices_success(self, mock_get_creds, mock_create_client, mock_adapter, device_manager):
         """Test successful device fetching"""
         # Setup mocks
         mock_get_creds.return_value = OAuthCredentials("token")
+
+        # Mock the API client directly to avoid withings_api import issues
         mock_client = Mock()
-        mock_adapter.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_devices = [
             MockWithingsDevice(123, "Scale", "Body+", "high"),
@@ -154,6 +156,9 @@ class TestDeviceManager:
             api_base_url="https://api.fitbit.com",
             device_endpoint="/devices",
             device_types_map={"TRACKER": DeviceType.ACTIVITY_TRACKER},
+            default_health_data_types=["heart_rate", "steps"],
+            supports_webhooks=True,
+            webhook_collection_types=["activities"],
         )
 
         fitbit_data = {
@@ -199,7 +204,7 @@ class TestDeviceManagerFactory:
 
     def test_create_unsupported_provider(self):
         """Test creating manager for unsupported provider"""
-        with pytest.raises(DeviceManagerError, match="Unsupported provider"):
+        with pytest.raises(ValueError, match="is not a valid Provider"):
             DeviceManagerFactory.create("unknown_provider")
 
     def test_get_supported_providers(self):

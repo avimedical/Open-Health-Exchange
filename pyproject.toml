@@ -65,6 +65,14 @@ pytest = "^8.3.0"
 pytest-django = "^4.9.0"
 types-requests = "^2.32.4.20250913"
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "open_health_exchange.settings"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+
 [build-system]
 requires = ["setuptools>=40.8.0", "wheel"]
 build-backend = "setuptools.build_meta"

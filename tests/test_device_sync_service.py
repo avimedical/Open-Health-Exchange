@@ -280,7 +280,9 @@ class TestMockDeviceSyncService:
         """Test mock service initialization"""
         mock_service = MockDeviceSyncService()
 
-        assert mock_service.fhir_client is None
+        # fhir_client is auto-created by parent class even when None is passed
+        assert mock_service.fhir_client is not None
+        assert isinstance(mock_service.fhir_client, FHIRClient)
         assert mock_service.published_devices == []
         assert mock_service.published_associations == []
 
