@@ -13,10 +13,18 @@ logger = logging.getLogger(__name__)
 class FHIRClient:
     """Client for interacting with FHIR server"""
 
-    def __init__(self):
-        self.base_url = settings.FHIR_BASE_URL
-        self.auth_header = settings.FHIR_AUTH_TOKEN_HEADER
-        self.auth_value = settings.FHIR_AUTH_TOKEN_VALUE
+    def __init__(self, base_url: str | None = None, auth_token: str | None = None, auth_header: str | None = None):
+        """
+        Initialize FHIR client.
+
+        Args:
+            base_url: FHIR server base URL (defaults to settings.FHIR_BASE_URL)
+            auth_token: Authentication token value (defaults to settings.FHIR_AUTH_TOKEN_VALUE)
+            auth_header: Authentication header name (defaults to settings.FHIR_AUTH_TOKEN_HEADER)
+        """
+        self.base_url = base_url or settings.FHIR_BASE_URL
+        self.auth_header = auth_header or settings.FHIR_AUTH_TOKEN_HEADER
+        self.auth_value = auth_token or settings.FHIR_AUTH_TOKEN_VALUE
 
         if not self.base_url:
             raise ValueError("FHIR_BASE_URL not configured")

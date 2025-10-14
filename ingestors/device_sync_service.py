@@ -187,8 +187,15 @@ class MockDeviceSyncService(DeviceSyncService):
     """Mock device sync service for testing"""
 
     def __init__(self):
-        # Don't initialize FHIR client for testing
-        super().__init__(fhir_client=None)
+        # Initialize with mock FHIR client that doesn't require real configuration
+        from publishers.fhir.client import FHIRClient
+
+        mock_client = FHIRClient(
+            base_url="http://mock-fhir-server.example.com/fhir/",
+            auth_token="mock-token",
+            auth_header="Authorization",
+        )
+        super().__init__(fhir_client=mock_client)
         self.published_devices = []
         self.published_associations = []
 
