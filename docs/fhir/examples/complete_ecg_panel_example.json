@@ -17,11 +17,11 @@
     "coding": [
       {
         "system": "http://loinc.org",
-        "code": "34534-8",
-        "display": "12 lead EKG panel"
+        "code": "8601-7",
+        "display": "EKG impression"
       }
     ],
-    "text": "12-lead Electrocardiogram Panel"
+    "text": "Electrocardiogram"
   },
   "subject": {
     "reference": "Patient/9f99f236-82f0-4fc9-a223-cf78330d64e2"
@@ -55,9 +55,9 @@
       },
       "valueQuantity": {
         "value": 72.0,
-        "unit": "/min",
+        "unit": "bpm",
         "system": "http://unitsofmeasure.org",
-        "code": "/min"
+        "code": "{beats}/min"
       }
     },
     {

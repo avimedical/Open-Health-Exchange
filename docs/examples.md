@@ -175,20 +175,20 @@ class HealthDataTransformer:
             HealthDataType.HEART_RATE: "8867-4",
             HealthDataType.STEPS: "55423-8",
             HealthDataType.RR_INTERVALS: "8637-1",
-            HealthDataType.ECG: "11524-6",
+            HealthDataType.ECG: "8601-7",
             HealthDataType.BLOOD_PRESSURE: "85354-9",
             HealthDataType.WEIGHT: "29463-7",
             HealthDataType.SPO2: "59408-5"
         }
 
-        # Units mapping
+        # Units mapping (aligned with mobile app)
         self.ucum_units = {
-            "bpm": "/min",      # beats per minute
-            "steps": "1",       # count
-            "ms": "ms",         # milliseconds
-            "mmHg": "mm[Hg]",   # blood pressure
-            "kg": "kg",         # weight
-            "%": "%"            # percentage
+            "bpm": "{beats}/min",  # beats per minute
+            "steps": "[count]",    # count
+            "ms": "ms",            # milliseconds
+            "mmHg": "mm[Hg]",      # blood pressure
+            "kg": "kg",            # weight
+            "%": "%"               # percentage
         }
 ```
 
@@ -225,9 +225,9 @@ class HealthDataTransformer:
             "effectiveDateTime": record.timestamp.isoformat() + "Z",
             "valueQuantity": {
                 "value": record.value,
-                "unit": "beats/minute",
+                "unit": "bpm",
                 "system": "http://unitsofmeasure.org",
-                "code": "/min"
+                "code": "{beats}/min"
             },
             "component": []  # May be populated with RR intervals
         }

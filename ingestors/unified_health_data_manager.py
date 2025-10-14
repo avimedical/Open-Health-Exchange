@@ -2,21 +2,18 @@
 Modern unified health data manager - Provider-agnostic, type-safe
 Replaces separate provider managers with unified batch operations
 """
+
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from social_django.models import UserSocialAuth
 
 from .api_clients import get_unified_health_data_client
 from .constants import Provider
-from .health_data_constants import (
-    HealthDataType, HealthDataRecord, DateRange, SyncTrigger, MeasurementSource
-)
+from .health_data_constants import DateRange, HealthDataRecord, HealthDataType, MeasurementSource, SyncTrigger
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -25,18 +22,19 @@ User = get_user_model()
 @dataclass(slots=True, frozen=True)
 class HealthDataQuery:
     """Immutable health data query for batch operations"""
+
     provider: Provider
     user_id: str
-    data_types: List[HealthDataType]
+    data_types: list[HealthDataType]
     date_range: DateRange
     sync_trigger: SyncTrigger
 
     @property
     def cache_key(self) -> str:
         """Generate cache key for this query"""
-        start_str = self.date_range.start.strftime('%Y%m%d')
-        end_str = self.date_range.end.strftime('%Y%m%d')
-        data_types_str = '-'.join(sorted([dt.value for dt in self.data_types]))
+        start_str = self.date_range.start.strftime("%Y%m%d")
+        end_str = self.date_range.end.strftime("%Y%m%d")
+        data_types_str = "-".join(sorted([dt.value for dt in self.data_types]))
         return f"health_manager:{self.provider.value}:{self.user_id}:{data_types_str}:{start_str}-{end_str}"
 
 
@@ -45,16 +43,12 @@ class HealthDataManager(Protocol):
     """Protocol for health data managers"""
 
     def fetch_health_data(
-        self,
-        user_id: str,
-        data_types: List[HealthDataType],
-        date_range: DateRange,
-        sync_trigger: SyncTrigger
-    ) -> List[HealthDataRecord]:
+        self, user_id: str, data_types: list[HealthDataType], date_range: DateRange, sync_trigger: SyncTrigger
+    ) -> list[HealthDataRecord]:
         """Fetch health data for user"""
         ...
 
-    def get_supported_data_types(self) -> List[HealthDataType]:
+    def get_supported_data_types(self) -> list[HealthDataType]:
         """Get data types supported by this provider"""
         ...
 
@@ -77,10 +71,10 @@ class UnifiedHealthDataManager:
         self,
         provider: Provider,
         user_id: str,
-        data_types: List[HealthDataType],
+        data_types: list[HealthDataType],
         date_range: DateRange,
-        sync_trigger: SyncTrigger
-    ) -> List[HealthDataRecord]:
+        sync_trigger: SyncTrigger,
+    ) -> list[HealthDataRecord]:
         """
         Fetch health data for a single provider
         Wrapper around unified batch method
@@ -89,17 +83,13 @@ class UnifiedHealthDataManager:
             return []
 
         query = HealthDataQuery(
-            provider=provider,
-            user_id=user_id,
-            data_types=data_types,
-            date_range=date_range,
-            sync_trigger=sync_trigger
+            provider=provider, user_id=user_id, data_types=data_types, date_range=date_range, sync_trigger=sync_trigger
         )
 
         results = self.fetch_multiple_queries([query])
         return results.get(query.cache_key, [])
 
-    def fetch_multiple_queries(self, queries: List[HealthDataQuery]) -> Dict[str, List[HealthDataRecord]]:
+    def fetch_multiple_queries(self, queries: list[HealthDataQuery]) -> dict[str, list[HealthDataRecord]]:
         """
         Unified method handling all health data fetching operations
         Single source of truth for data fetching, transformation, and error handling
@@ -107,7 +97,7 @@ class UnifiedHealthDataManager:
         if not queries:
             return {}
 
-        results = {}
+        results: dict[str, list[HealthDataRecord]] = {}
 
         for query in queries:
             try:
@@ -135,15 +125,12 @@ class UnifiedHealthDataManager:
                             provider=query.provider,
                             data_type=data_type,
                             user_id=query.user_id,
-                            date_range=query.date_range
+                            date_range=query.date_range,
                         )
 
                         # Transform raw data to HealthDataRecord objects
                         records = self._transform_raw_data_to_records(
-                            query.provider,
-                            data_type,
-                            query.user_id,
-                            raw_data
+                            query.provider, data_type, query.user_id, raw_data
                         )
 
                         all_records.extend(records)
@@ -152,9 +139,7 @@ class UnifiedHealthDataManager:
                         )
 
                     except Exception as e:
-                        self.logger.error(
-                            f"Error fetching {data_type.value} from {query.provider.value}: {e}"
-                        )
+                        self.logger.error(f"Error fetching {data_type.value} from {query.provider.value}: {e}")
                         # Continue with other data types
 
                 results[query.cache_key] = all_records
@@ -165,9 +150,9 @@ class UnifiedHealthDataManager:
 
         return results
 
-    def _get_supported_data_types(self, provider: Provider) -> List[HealthDataType]:
+    def _get_supported_data_types(self, provider: Provider) -> list[HealthDataType]:
         """Get supported data types for provider from configuration"""
-        provider_config = self.config.get('SUPPORTED_DATA_TYPES', {})
+        provider_config = self.config.get("SUPPORTED_DATA_TYPES", {})
 
         # Default supported types if not in config
         default_types = {
@@ -175,7 +160,7 @@ class UnifiedHealthDataManager:
                 HealthDataType.HEART_RATE,
                 HealthDataType.STEPS,
                 HealthDataType.WEIGHT,
-                HealthDataType.BLOOD_PRESSURE
+                HealthDataType.BLOOD_PRESSURE,
             ],
             Provider.FITBIT: [
                 HealthDataType.HEART_RATE,
@@ -183,8 +168,8 @@ class UnifiedHealthDataManager:
                 HealthDataType.WEIGHT,
                 HealthDataType.SLEEP,
                 HealthDataType.ECG,
-                HealthDataType.RR_INTERVALS
-            ]
+                HealthDataType.RR_INTERVALS,
+            ],
         }
 
         # Get config values and convert string names to enum values
@@ -203,12 +188,8 @@ class UnifiedHealthDataManager:
         return default_types.get(provider, [])
 
     def _transform_raw_data_to_records(
-        self,
-        provider: Provider,
-        data_type: HealthDataType,
-        user_id: str,
-        raw_data: List[Dict]
-    ) -> List[HealthDataRecord]:
+        self, provider: Provider, data_type: HealthDataType, user_id: str, raw_data: list[dict]
+    ) -> list[HealthDataRecord]:
         """Transform raw API data into HealthDataRecord objects"""
         records = []
 
@@ -216,10 +197,7 @@ class UnifiedHealthDataManager:
             try:
                 # Extract common fields using provider-agnostic logic
                 record = self._create_health_record_from_raw(
-                    provider=provider,
-                    data_type=data_type,
-                    user_id=user_id,
-                    raw_item=item
+                    provider=provider, data_type=data_type, user_id=user_id, raw_item=item
                 )
                 if record:
                     records.append(record)
@@ -231,11 +209,7 @@ class UnifiedHealthDataManager:
         return records
 
     def _create_health_record_from_raw(
-        self,
-        provider: Provider,
-        data_type: HealthDataType,
-        user_id: str,
-        raw_item: Dict
+        self, provider: Provider, data_type: HealthDataType, user_id: str, raw_item: dict
     ) -> HealthDataRecord | None:
         """Create HealthDataRecord from raw API data using provider-agnostic mapping"""
         try:
@@ -245,29 +219,22 @@ class UnifiedHealthDataManager:
                     return self._create_withings_health_record(data_type, user_id, raw_item)
                 case Provider.FITBIT:
                     return self._create_fitbit_health_record(data_type, user_id, raw_item)
-                case _:
-                    self.logger.error(f"Unsupported provider: {provider}")
-                    return None
-
         except Exception as e:
             self.logger.error(f"Failed to create health record: {e}")
             return None
 
     def _create_withings_health_record(
-        self,
-        data_type: HealthDataType,
-        user_id: str,
-        raw_item: Dict
+        self, data_type: HealthDataType, user_id: str, raw_item: dict
     ) -> HealthDataRecord | None:
         """Create HealthDataRecord from Withings raw data"""
         # Extract common Withings fields
-        timestamp = raw_item.get('timestamp')
+        timestamp = raw_item.get("timestamp")
         if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         elif not isinstance(timestamp, datetime):
             return None
 
-        value = raw_item.get('value')
+        value = raw_item.get("value")
         if value is None:
             return None
 
@@ -276,9 +243,9 @@ class UnifiedHealthDataManager:
 
         # Create metadata
         metadata = {
-            'source': 'withings_api',
-            'measurement_id': raw_item.get('measurement_id'),
-            'category': raw_item.get('category')
+            "source": "withings_api",
+            "measurement_id": raw_item.get("measurement_id"),
+            "category": raw_item.get("category"),
         }
 
         return HealthDataRecord(
@@ -288,38 +255,35 @@ class UnifiedHealthDataManager:
             timestamp=timestamp,
             value=float(value),
             unit=unit,
-            device_id=raw_item.get('device_id'),
+            device_id=raw_item.get("device_id"),
             metadata=metadata,
-            measurement_source=raw_item.get('measurement_source', MeasurementSource.UNKNOWN)
+            measurement_source=raw_item.get("measurement_source", MeasurementSource.UNKNOWN),
         )
 
     def _create_fitbit_health_record(
-        self,
-        data_type: HealthDataType,
-        user_id: str,
-        raw_item: Dict
+        self, data_type: HealthDataType, user_id: str, raw_item: dict
     ) -> HealthDataRecord | None:
         """Create HealthDataRecord from Fitbit raw data"""
         # Extract common Fitbit fields
-        timestamp = raw_item.get('timestamp')
+        timestamp = raw_item.get("timestamp")
         if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         elif not isinstance(timestamp, datetime):
             # Try 'date' field for activity data
-            date_value = raw_item.get('date')
+            date_value = raw_item.get("date")
             if isinstance(date_value, datetime):
                 timestamp = date_value
             else:
                 return None
 
-        value = raw_item.get('value')
+        value = raw_item.get("value")
         if value is None:
             # Try data type specific fields
             match data_type:
                 case HealthDataType.STEPS:
-                    value = raw_item.get('steps')
+                    value = raw_item.get("steps")
                 case HealthDataType.SLEEP:
-                    value = raw_item.get('value', raw_item.get('minutes_asleep'))
+                    value = raw_item.get("value", raw_item.get("minutes_asleep"))
                 case _:
                     pass
 
@@ -331,21 +295,21 @@ class UnifiedHealthDataManager:
 
         # Create metadata
         metadata = {
-            'source': 'fitbit_api',
-            'log_id': raw_item.get('log_id'),
-            'heart_rate_type': raw_item.get('heart_rate_type'),
-            'log_type': raw_item.get('log_type')
+            "source": "fitbit_api",
+            "log_id": raw_item.get("log_id"),
+            "heart_rate_type": raw_item.get("heart_rate_type"),
+            "log_type": raw_item.get("log_type"),
         }
 
         # Add specific metadata for different data types
         match data_type:
             case HealthDataType.SLEEP:
-                metadata['sleep_metrics'] = raw_item.get('sleep_metrics', {})
+                metadata["sleep_metrics"] = raw_item.get("sleep_metrics", {})
             case HealthDataType.ECG:
-                metadata['ecg_metrics'] = raw_item.get('ecg_metrics', {})
-                metadata['waveform_data'] = raw_item.get('waveform_data', {})
+                metadata["ecg_metrics"] = raw_item.get("ecg_metrics", {})
+                metadata["waveform_data"] = raw_item.get("waveform_data", {})
             case HealthDataType.RR_INTERVALS:
-                metadata['hrv_metrics'] = raw_item.get('hrv_metrics', {})
+                metadata["hrv_metrics"] = raw_item.get("hrv_metrics", {})
 
         return HealthDataRecord(
             provider=Provider.FITBIT,
@@ -354,9 +318,9 @@ class UnifiedHealthDataManager:
             timestamp=timestamp,
             value=float(value),
             unit=unit,
-            device_id=raw_item.get('device_id'),
+            device_id=raw_item.get("device_id"),
             metadata=metadata,
-            measurement_source=raw_item.get('measurement_source', MeasurementSource.UNKNOWN)
+            measurement_source=raw_item.get("measurement_source", MeasurementSource.UNKNOWN),
         )
 
     def _get_unit_for_data_type(self, data_type: HealthDataType) -> str:
@@ -368,22 +332,22 @@ class UnifiedHealthDataManager:
             HealthDataType.BLOOD_PRESSURE: "mmHg",
             HealthDataType.SLEEP: "minutes",
             HealthDataType.ECG: "bpm",
-            HealthDataType.RR_INTERVALS: "ms"
+            HealthDataType.RR_INTERVALS: "ms",
         }
         return unit_mapping.get(data_type, "unknown")
 
-    def get_supported_data_types(self, provider: Provider) -> List[HealthDataType]:
+    def get_supported_data_types(self, provider: Provider) -> list[HealthDataType]:
         """Get data types supported by provider"""
         return self._get_supported_data_types(provider)
 
-    def get_manager_stats(self) -> Dict[str, any]:
+    def get_manager_stats(self) -> dict[str, Any]:
         """Get manager configuration and status"""
         return {
-            'supported_providers': [Provider.WITHINGS.value, Provider.FITBIT.value],
-            'supported_data_types': {
+            "supported_providers": [Provider.WITHINGS.value, Provider.FITBIT.value],
+            "supported_data_types": {
                 Provider.WITHINGS.value: [dt.value for dt in self._get_supported_data_types(Provider.WITHINGS)],
-                Provider.FITBIT.value: [dt.value for dt in self._get_supported_data_types(Provider.FITBIT)]
-            }
+                Provider.FITBIT.value: [dt.value for dt in self._get_supported_data_types(Provider.FITBIT)],
+            },
         }
 
 
@@ -407,24 +371,20 @@ class ProviderHealthDataManager:
         self.provider = provider
         self.unified_manager = get_unified_health_data_manager()
 
-    def get_supported_data_types(self) -> List[HealthDataType]:
+    def get_supported_data_types(self) -> list[HealthDataType]:
         """Get data types supported by this provider"""
         return self.unified_manager.get_supported_data_types(self.provider)
 
     def fetch_health_data(
-        self,
-        user_id: str,
-        data_types: List[HealthDataType],
-        date_range: DateRange,
-        sync_trigger: SyncTrigger
-    ) -> List[HealthDataRecord]:
+        self, user_id: str, data_types: list[HealthDataType], date_range: DateRange, sync_trigger: SyncTrigger
+    ) -> list[HealthDataRecord]:
         """Fetch health data for this provider"""
         return self.unified_manager.fetch_health_data(
             provider=self.provider,
             user_id=user_id,
             data_types=data_types,
             date_range=date_range,
-            sync_trigger=sync_trigger
+            sync_trigger=sync_trigger,
         )
 
 
@@ -437,6 +397,6 @@ class HealthDataManagerFactory:
         return ProviderHealthDataManager(provider)
 
     @staticmethod
-    def get_supported_providers() -> List[Provider]:
+    def get_supported_providers() -> list[Provider]:
         """Get list of supported providers"""
         return [Provider.WITHINGS, Provider.FITBIT]

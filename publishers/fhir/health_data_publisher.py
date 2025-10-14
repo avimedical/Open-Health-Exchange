@@ -1,14 +1,15 @@
 """
 Health Data Publisher for managing FHIR health data resources
 """
+
 import logging
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+from typing import Any
+
 from django.conf import settings
 
-from .client import FHIRClient
 from ingestors.health_data_constants import HealthDataType, Provider
 
+from .client import FHIRClient
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,7 @@ class HealthDataPublisher:
     def __init__(self):
         self.fhir_client = FHIRClient()
 
-    def publish_health_observations(
-        self,
-        observations: List[Dict[str, Any]],
-        batch_size: int = None
-    ) -> Dict[str, Any]:
+    def publish_health_observations(self, observations: list[dict[str, Any]], batch_size: int = None) -> dict[str, Any]:
         """
         Publish health observations to the FHIR server
 
@@ -40,17 +37,17 @@ class HealthDataPublisher:
             "failed_observations": 0,
             "errors": [],
             "published_ids": [],
-            "batch_results": []
+            "batch_results": [],
         }
 
         # Use default batch size from settings if not provided
         if batch_size is None:
-            batch_size = settings.BATCH_SIZES['PUBLISHER']
+            batch_size = settings.BATCH_SIZES["PUBLISHER"]
 
         try:
             # Process observations in batches
             for i in range(0, len(observations), batch_size):
-                batch = observations[i:i + batch_size]
+                batch = observations[i : i + batch_size]
                 batch_result = self._publish_observation_batch(batch, i // batch_size + 1)
 
                 result["published_successfully"] += batch_result.get("successful", 0)
@@ -79,11 +76,7 @@ class HealthDataPublisher:
             result["success"] = False
             return result
 
-    def _publish_observation_batch(
-        self,
-        observations: List[Dict[str, Any]],
-        batch_number: int
-    ) -> Dict[str, Any]:
+    def _publish_observation_batch(self, observations: list[dict[str, Any]], batch_number: int) -> dict[str, Any]:
         """Publish a batch of observations"""
         batch_result = {
             "batch_number": batch_number,
@@ -91,7 +84,7 @@ class HealthDataPublisher:
             "successful": 0,
             "failed": 0,
             "errors": [],
-            "published_ids": []
+            "published_ids": [],
         }
 
         for observation in observations:
@@ -100,7 +93,9 @@ class HealthDataPublisher:
                 existing_observation = self._find_existing_observation(observation)
 
                 if existing_observation:
-                    logger.debug(f"Skipping duplicate observation with identifier {observation.get('identifier', [{}])[0].get('value')}")
+                    logger.debug(
+                        f"Skipping duplicate observation with identifier {observation.get('identifier', [{}])[0].get('value')}"
+                    )
                     continue
 
                 # Publish new observation
@@ -122,7 +117,7 @@ class HealthDataPublisher:
 
         return batch_result
 
-    def _find_existing_observation(self, observation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _find_existing_observation(self, observation: dict[str, Any]) -> dict[str, Any] | None:
         """Check if an observation with the same identifier already exists"""
         try:
             identifiers = observation.get("identifier", [])
@@ -146,9 +141,7 @@ class HealthDataPublisher:
                 return None
 
             # Search for existing observation
-            existing = self.fhir_client.find_resource_by_identifier(
-                "Observation", system, value
-            )
+            existing = self.fhir_client.find_resource_by_identifier("Observation", system, value)
 
             return existing
 
@@ -156,10 +149,7 @@ class HealthDataPublisher:
             logger.debug(f"Error checking for existing observation: {e}")
             return None
 
-    def publish_health_bundle(
-        self,
-        bundle: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def publish_health_bundle(self, bundle: dict[str, Any]) -> dict[str, Any]:
         """
         Publish a FHIR transaction bundle of health data
 
@@ -196,7 +186,7 @@ class HealthDataPublisher:
                 "total_entries": len(bundle.get("entry", [])),
                 "published_successfully": published_count,
                 "failed_entries": failed_count,
-                "errors": errors
+                "errors": errors,
             }
 
         except Exception as e:
@@ -207,14 +197,12 @@ class HealthDataPublisher:
                 "total_entries": len(bundle.get("entry", [])),
                 "published_successfully": 0,
                 "failed_entries": len(bundle.get("entry", [])),
-                "errors": [str(e)]
+                "errors": [str(e)],
             }
 
     def get_health_data_statistics(
-        self,
-        patient_reference: str,
-        data_types: List[HealthDataType] | None = None
-    ) -> Dict[str, Any]:
+        self, patient_reference: str, data_types: list[HealthDataType] | None = None
+    ) -> dict[str, Any]:
         """
         Get health data statistics for a patient
 
@@ -236,12 +224,12 @@ class HealthDataPublisher:
                     observations.append(entry.get("resource"))
 
             # Analyze observations
-            stats: Dict[str, Any] = {
+            stats: dict[str, Any] = {
                 "total_observations": len(observations),
                 "observations_by_type": {},
                 "observations_by_provider": {},
                 "latest_observations": {},
-                "date_range": {}
+                "date_range": {},
             }
 
             if not observations:
@@ -291,25 +279,15 @@ class HealthDataPublisher:
 
             # Calculate date range
             if dates:
-                stats["date_range"] = {
-                    "earliest": min(dates),
-                    "latest": max(dates)
-                }
+                stats["date_range"] = {"earliest": min(dates), "latest": max(dates)}
 
             return stats
 
         except Exception as e:
             logger.error(f"Error getting health data statistics for {patient_reference}: {e}")
-            return {
-                "error": str(e),
-                "total_observations": 0
-            }
+            return {"error": str(e), "total_observations": 0}
 
-    def delete_health_data_by_provider(
-        self,
-        patient_reference: str,
-        provider: Provider
-    ) -> Dict[str, Any]:
+    def delete_health_data_by_provider(self, patient_reference: str, provider: Provider) -> dict[str, Any]:
         """
         Delete all health data observations for a patient from a specific provider
 
@@ -322,10 +300,7 @@ class HealthDataPublisher:
         """
         try:
             # Search for observations from this provider
-            search_params = {
-                "subject": patient_reference,
-                "_tag": f"#{provider.value}"
-            }
+            search_params = {"subject": patient_reference, "_tag": f"#{provider.value}"}
 
             bundle = self.fhir_client.search_resource("Observation", search_params)
             observations = []
@@ -355,13 +330,9 @@ class HealthDataPublisher:
                 "total_found": len(observations),
                 "deleted_count": deleted_count,
                 "failed_count": len(errors),
-                "errors": errors
+                "errors": errors,
             }
 
         except Exception as e:
             logger.error(f"Error deleting health data for provider {provider.value}: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "deleted_count": 0
-            }
+            return {"success": False, "error": str(e), "deleted_count": 0}

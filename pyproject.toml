@@ -1,14 +1,29 @@
-[tool.black]
+[tool.ruff]
 line-length = 120
-include = '\.pyi?$'
-extend-exclude = '''
-# A regex preceded with ^/ will apply only to files and directories
-# in the root of the project.
-^/foo.py  # exclude a file named foo.py in the root of the project
-'''
+target-version = "py314"
+extend-exclude = ["*_original.py", "*_backup.py"]
 
-[tool.isort]
-profile = 'black'
+[tool.ruff.lint]
+# Enable pycodestyle (E, W), Pyflakes (F), isort (I), and more
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "PIE", "T20", "Q"]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "DTZ001",  # datetime() without tzinfo in tests - acceptable for mocking
+    "B904",  # Exception chaining - TODO: add proper exception chaining
+    "N806",  # Variable User in function - Django pattern for get_user_model()
+    "B017",  # pytest.raises(Exception) is acceptable in tests
+    "PIE796",  # Duplicate enum values intentional for battery levels
+]
+
+[tool.ruff.format]
+# Use Black-compatible formatting
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["base", "ingestors", "transformers", "publishers", "metrics", "webhooks"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
@@ -41,14 +56,22 @@ django-redis = "^6.0.0"
 django-stubs = {extras = ["compatible-mypy"], version = "^5.2.5"}
 withings-api = "^2.4.0"
 prometheus-client = "^0.21.0"
+ruff = "^0.14.0"
 
 [tool.poetry.group.dev.dependencies]
-flake8 = "^7.0"
-black = "^25.1.0"
+ruff = "^0.14.0"
 python-dotenv = "^1.0.1"
 pytest = "^8.3.0"
 pytest-django = "^4.9.0"
 types-requests = "^2.32.4.20250913"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "open_health_exchange.settings"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
 
 [build-system]
 requires = ["setuptools>=40.8.0", "wheel"]

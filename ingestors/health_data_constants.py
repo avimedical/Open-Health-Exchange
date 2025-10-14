@@ -1,16 +1,20 @@
 """
 Health data constants and models for the sync system
 """
-from enum import StrEnum
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
+
+from django.utils import timezone
 
 from .constants import Provider
 
 
 class HealthDataType(StrEnum):
     """Types of health data we can sync"""
+
     HEART_RATE = "heart_rate"
     STEPS = "steps"
     RR_INTERVALS = "rr_intervals"
@@ -24,35 +28,44 @@ class HealthDataType(StrEnum):
     PULSE_WAVE_VELOCITY = "pulse_wave_velocity"
     FAT_MASS = "fat_mass"
 
+
 class AggregationLevel(StrEnum):
     """Data aggregation preferences"""
+
     INDIVIDUAL = "individual"  # Keep individual measurements
-    HOURLY = "hourly"         # Aggregate into hourly summaries
-    DAILY = "daily"           # Daily summaries
+    HOURLY = "hourly"  # Aggregate into hourly summaries
+    DAILY = "daily"  # Daily summaries
+
 
 class SyncFrequency(StrEnum):
     """How often to sync data"""
-    REALTIME = "realtime"     # Via push notifications
-    HOURLY = "hourly"         # Every hour via cron
-    DAILY = "daily"           # Once per day
+
+    REALTIME = "realtime"  # Via push notifications
+    HOURLY = "hourly"  # Every hour via cron
+    DAILY = "daily"  # Once per day
+
 
 class SyncTrigger(StrEnum):
     """What triggered this sync"""
-    INITIAL = "initial"       # First-time sync
+
+    INITIAL = "initial"  # First-time sync
     INCREMENTAL = "incremental"  # Regular incremental sync
-    WEBHOOK = "webhook"       # Push notification
-    MANUAL = "manual"         # User-triggered
+    WEBHOOK = "webhook"  # Push notification
+    MANUAL = "manual"  # User-triggered
+
 
 class MeasurementSource(StrEnum):
     """Source of measurement data"""
-    DEVICE = "device"         # Automatic measurement by device
-    USER = "user"             # Manually entered by user
-    UNKNOWN = "unknown"       # Source not specified
+
+    DEVICE = "device"  # Automatic measurement by device
+    USER = "user"  # Manually entered by user
+    UNKNOWN = "unknown"  # Source not specified
 
 
 @dataclass(slots=True, frozen=True)
 class DateRange:
     """Date range for data queries"""
+
     start: datetime
     end: datetime
 
@@ -64,6 +77,7 @@ class DateRange:
 @dataclass(slots=True)
 class HealthDataRecord:
     """Raw health data record from provider"""
+
     provider: Provider
     user_id: str
     data_type: HealthDataType
@@ -82,6 +96,7 @@ class HealthDataRecord:
 @dataclass(slots=True)
 class HealthSyncConfig:
     """User-level sync configuration"""
+
     user_id: str
     enabled_data_types: list[HealthDataType]
     aggregation_preference: AggregationLevel
@@ -97,13 +112,14 @@ class HealthSyncConfig:
             self.linked_data_rules = {
                 HealthDataType.ECG: [HealthDataType.HEART_RATE],
                 HealthDataType.RR_INTERVALS: [HealthDataType.HEART_RATE],
-                HealthDataType.HRV: [HealthDataType.HEART_RATE]
+                HealthDataType.HRV: [HealthDataType.HEART_RATE],
             }
 
 
 @dataclass(slots=True)
 class HealthSyncResult:
     """Result of health data synchronization"""
+
     user_id: str
     provider: Provider
     data_types: list[HealthDataType]
@@ -120,39 +136,57 @@ class HealthSyncResult:
         if self.errors is None:
             self.errors = []
         if self.sync_timestamp is None:
-            self.sync_timestamp = datetime.utcnow().isoformat() + "Z"
+            self.sync_timestamp = timezone.now().isoformat() + "Z"
 
 
 # LOINC codes for health data types
 HEALTH_DATA_LOINC_CODES = {
-    HealthDataType.HEART_RATE: "8867-4",           # Heart rate
-    HealthDataType.STEPS: "55423-8",               # Number of steps in unspecified time Pedometer
-    HealthDataType.RR_INTERVALS: "8637-1",         # R-R interval
-    HealthDataType.ECG: "11524-6",                 # EKG study
-    HealthDataType.BLOOD_PRESSURE: "85354-9",      # Blood pressure panel with all children optional
-    HealthDataType.WEIGHT: "29463-7",              # Body weight
-    HealthDataType.TEMPERATURE: "8310-5",          # Body temperature
-    HealthDataType.SPO2: "59408-5",                # Oxygen saturation in Arterial blood by Pulse oximetry
-    HealthDataType.SLEEP: "93832-4",               # Sleep study
+    HealthDataType.HEART_RATE: "8867-4",  # Heart rate
+    HealthDataType.STEPS: "55423-8",  # Number of steps in unspecified time Pedometer
+    HealthDataType.RR_INTERVALS: "8637-1",  # R-R interval
+    HealthDataType.ECG: "8601-7",  # EKG impression
+    HealthDataType.BLOOD_PRESSURE: "85354-9",  # Blood pressure panel with all children optional
+    HealthDataType.WEIGHT: "29463-7",  # Body weight
+    HealthDataType.TEMPERATURE: "8310-5",  # Body temperature
+    HealthDataType.SPO2: "59408-5",  # Oxygen saturation in Arterial blood by Pulse oximetry
+    HealthDataType.SLEEP: "93832-4",  # Sleep study
     HealthDataType.PULSE_WAVE_VELOCITY: "8494-7",  # Pulse wave velocity
-    HealthDataType.FAT_MASS: "73708-0"             # Fat mass by DEXA
+    HealthDataType.FAT_MASS: "73708-0",  # Fat mass by DEXA
 }
 
-# UCUM units for health data types
+# UCUM units for health data types (aligned with mobile app BaseUnit)
+# Maps display unit to UCUM code
 HEALTH_DATA_UCUM_UNITS = {
-    "bpm": "/min",              # beats per minute
-    "steps": "1",               # count
-    "ms": "ms",                 # milliseconds
-    "mmHg": "mm[Hg]",          # blood pressure
-    "kg": "kg",                 # weight
-    "lbs": "[lb_av]",          # pounds
-    "celsius": "Cel",           # Celsius
-    "fahrenheit": "[degF]",     # Fahrenheit
-    "%": "%",                   # percentage
-    "minutes": "min",           # time in minutes
-    "hours": "h",               # time in hours
-    "m/s": "m/s",              # meters per second
-    "g": "g"                    # grams
+    "bpm": "{beats}/min",  # beats per minute
+    "cal": "cal",  # calories
+    "cm": "cm",  # centimeter
+    "count": "[count]",  # count (for steps)
+    "steps": "[count]",  # steps (alternative mapping)
+    "°C": "Cel",  # degrees Celsius (UCUM standard)
+    "celsius": "Cel",  # Celsius (alternative)
+    "kg": "kg",  # kilograms
+    "kg/m²": "kg/m2",  # kilograms per square meter (BMI)
+    "l": "L",  # liter
+    "L": "L",  # liter (alternative)
+    "m": "m",  # meter
+    "uV": "uV",  # microvolt
+    "mmol/l": "mmol/L",  # millimole per liter
+    "mmol/L": "mmol/L",  # millimole per liter (alternative)
+    "mmol/mol": "mmol/mol",  # millimole per mole
+    "mg/dl": "mg/dL",  # milligram per deciliter
+    "mg/dL": "mg/dL",  # milligram per deciliter (alternative)
+    "mmHg": "mm[Hg]",  # millimeters of mercury (blood pressure)
+    "ms": "ms",  # milliseconds
+    "min": "min",  # minutes
+    "minutes": "min",  # minutes (alternative)
+    "%": "%",  # percentage
+    # Legacy/additional units
+    "lbs": "[lb_av]",  # pounds
+    "fahrenheit": "[degF]",  # Fahrenheit
+    "hours": "h",  # hours
+    "h": "h",  # hours (alternative)
+    "m/s": "m/s",  # meters per second
+    "g": "g",  # grams
 }
 
 # Display names for health data types
@@ -168,7 +202,7 @@ HEALTH_DATA_DISPLAY_NAMES = {
     HealthDataType.SPO2: "Oxygen saturation",
     HealthDataType.SLEEP: "Sleep data",
     HealthDataType.PULSE_WAVE_VELOCITY: "Pulse wave velocity",
-    HealthDataType.FAT_MASS: "Fat mass"
+    HealthDataType.FAT_MASS: "Fat mass",
 }
 
 # FHIR observation categories
@@ -184,5 +218,5 @@ HEALTH_DATA_FHIR_CATEGORIES = {
     HealthDataType.SPO2: "vital-signs",
     HealthDataType.SLEEP: "activity",
     HealthDataType.PULSE_WAVE_VELOCITY: "vital-signs",
-    HealthDataType.FAT_MASS: "vital-signs"
+    HealthDataType.FAT_MASS: "vital-signs",
 }

@@ -49,9 +49,9 @@
         },
         "valueQuantity": {
           "value": 68,
-          "unit": "beats/minute",
+          "unit": "bpm",
           "system": "http://unitsofmeasure.org",
-          "code": "/min"
+          "code": "{beats}/min"
         }
       },
       "request": {
@@ -96,7 +96,7 @@
           "value": 12847,
           "unit": "steps",
           "system": "http://unitsofmeasure.org",
-          "code": "1"
+          "code": "[count]"
         }
       },
       "request": {

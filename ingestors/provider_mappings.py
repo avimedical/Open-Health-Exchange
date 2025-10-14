@@ -15,8 +15,8 @@ Example Flow:
     System resolves: Subscribe to appli [1, 4, 54]
     When webhook arrives for appli 54: Fetch data using /v2/heart endpoint
 """
+
 from dataclasses import dataclass
-from typing import Optional, Union, List, Dict
 from enum import Enum
 
 from .health_data_constants import Provider
@@ -24,6 +24,7 @@ from .health_data_constants import Provider
 
 class APIMethod(Enum):
     """API request methods"""
+
     GET = "GET"
     POST = "POST"
 
@@ -49,13 +50,14 @@ class DataTypeConfig:
         requires_date_range: Whether this data type requires date range parameters
         description: Brief description of what this data type represents
     """
+
     name: str
     display_name: str
-    subscription_categories: List[str]
+    subscription_categories: list[str]
     api_endpoint: str
     api_method: APIMethod
-    api_action: Optional[str]
-    meastype: Optional[Union[int, List[int]]]
+    api_action: str | None
+    meastype: int | list[int] | None
     response_processor: str
     requires_date_range: bool
     description: str
@@ -65,148 +67,138 @@ class DataTypeConfig:
 # WITHINGS DATA TYPE MAPPINGS
 # ==============================================================================
 
-WITHINGS_DATA_TYPES: Dict[str, DataTypeConfig] = {
-    'ecg': DataTypeConfig(
-        name='ecg',
-        display_name='Electrocardiogram (ECG)',
-        subscription_categories=['54'],  # Appli 54: ECG data
-        api_endpoint='/v2/heart',
+WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
+    "ecg": DataTypeConfig(
+        name="ecg",
+        display_name="Electrocardiogram (ECG)",
+        subscription_categories=["54"],  # Appli 54: ECG data
+        api_endpoint="/v2/heart",
         api_method=APIMethod.GET,
-        api_action='list',
+        api_action="list",
         meastype=None,  # ECG uses Heart v2 API, not measure endpoint
-        response_processor='_process_withings_ecg',
+        response_processor="_process_withings_ecg",
         requires_date_range=True,
-        description='ECG recordings with AFib detection and heart rate'
+        description="ECG recordings with AFib detection and heart rate",
     ),
-
-    'heart_rate': DataTypeConfig(
-        name='heart_rate',
-        display_name='Heart Rate',
-        subscription_categories=['4'],  # Appli 4: Pressure-related data
-        api_endpoint='/v2/measure',
+    "heart_rate": DataTypeConfig(
+        name="heart_rate",
+        display_name="Heart Rate",
+        subscription_categories=["4"],  # Appli 4: Pressure-related data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=11,  # Meastype 11: Heart pulse
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Heart rate measurements in beats per minute'
+        description="Heart rate measurements in beats per minute",
     ),
-
-    'weight': DataTypeConfig(
-        name='weight',
-        display_name='Weight',
-        subscription_categories=['1'],  # Appli 1: Weight-related metrics
-        api_endpoint='/v2/measure',
+    "weight": DataTypeConfig(
+        name="weight",
+        display_name="Weight",
+        subscription_categories=["1"],  # Appli 1: Weight-related metrics
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=1,  # Meastype 1: Weight
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Body weight measurements in kg'
+        description="Body weight measurements in kg",
     ),
-
-    'fat_mass': DataTypeConfig(
-        name='fat_mass',
-        display_name='Fat Mass',
-        subscription_categories=['1'],  # Appli 1: Weight-related metrics
-        api_endpoint='/v2/measure',
+    "fat_mass": DataTypeConfig(
+        name="fat_mass",
+        display_name="Fat Mass",
+        subscription_categories=["1"],  # Appli 1: Weight-related metrics
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=8,  # Meastype 8: Fat mass weight
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Body fat mass in kg'
+        description="Body fat mass in kg",
     ),
-
-    'steps': DataTypeConfig(
-        name='steps',
-        display_name='Steps',
-        subscription_categories=['16'],  # Appli 16: Activity data
-        api_endpoint='/v2/measure',
+    "steps": DataTypeConfig(
+        name="steps",
+        display_name="Steps",
+        subscription_categories=["16"],  # Appli 16: Activity data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getactivity',
+        api_action="getactivity",
         meastype=None,  # Activity uses different action, not meastype
-        response_processor='_process_withings_activity',
+        response_processor="_process_withings_activity",
         requires_date_range=True,
-        description='Daily step count'
+        description="Daily step count",
     ),
-
-    'blood_pressure': DataTypeConfig(
-        name='blood_pressure',
-        display_name='Blood Pressure',
-        subscription_categories=['4'],  # Appli 4: Pressure-related data
-        api_endpoint='/v2/measure',
+    "blood_pressure": DataTypeConfig(
+        name="blood_pressure",
+        display_name="Blood Pressure",
+        subscription_categories=["4"],  # Appli 4: Pressure-related data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=[9, 10],  # Meastype 9: Diastolic, 10: Systolic
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Blood pressure readings (systolic/diastolic)'
+        description="Blood pressure readings (systolic/diastolic)",
     ),
-
-    'temperature': DataTypeConfig(
-        name='temperature',
-        display_name='Body Temperature',
-        subscription_categories=['2'],  # Appli 2: Temperature-related data
-        api_endpoint='/v2/measure',
+    "temperature": DataTypeConfig(
+        name="temperature",
+        display_name="Body Temperature",
+        subscription_categories=["2"],  # Appli 2: Temperature-related data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=12,  # Meastype 12: Temperature
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Body temperature measurements'
+        description="Body temperature measurements",
     ),
-
-    'spo2': DataTypeConfig(
-        name='spo2',
-        display_name='Oxygen Saturation (SpO2)',
-        subscription_categories=['4'],  # Appli 4: Pressure-related data
-        api_endpoint='/v2/measure',
+    "spo2": DataTypeConfig(
+        name="spo2",
+        display_name="Oxygen Saturation (SpO2)",
+        subscription_categories=["4"],  # Appli 4: Pressure-related data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=54,  # Meastype 54: SpO2
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Blood oxygen saturation percentage'
+        description="Blood oxygen saturation percentage",
     ),
-
-    'sleep': DataTypeConfig(
-        name='sleep',
-        display_name='Sleep Data',
-        subscription_categories=['44'],  # Appli 44: Sleep-related data
-        api_endpoint='/v2/sleep',
+    "sleep": DataTypeConfig(
+        name="sleep",
+        display_name="Sleep Data",
+        subscription_categories=["44"],  # Appli 44: Sleep-related data
+        api_endpoint="/v2/sleep",
         api_method=APIMethod.GET,
-        api_action='get',
+        api_action="get",
         meastype=None,  # Sleep uses different endpoint
-        response_processor='_process_withings_sleep',
+        response_processor="_process_withings_sleep",
         requires_date_range=True,
-        description='Sleep sessions with stages and quality metrics'
+        description="Sleep sessions with stages and quality metrics",
     ),
-
-    'rr_intervals': DataTypeConfig(
-        name='rr_intervals',
-        display_name='RR Intervals (HRV)',
-        subscription_categories=['44'],  # Appli 44: Sleep-related data (includes HRV)
-        api_endpoint='/v2/sleep',
+    "rr_intervals": DataTypeConfig(
+        name="rr_intervals",
+        display_name="RR Intervals (HRV)",
+        subscription_categories=["44"],  # Appli 44: Sleep-related data (includes HRV)
+        api_endpoint="/v2/sleep",
         api_method=APIMethod.GET,
-        api_action='get',
+        api_action="get",
         meastype=None,
-        response_processor='_process_withings_sleep',
+        response_processor="_process_withings_sleep",
         requires_date_range=True,
-        description='Heart rate variability measurements'
+        description="Heart rate variability measurements",
     ),
-
-    'glucose': DataTypeConfig(
-        name='glucose',
-        display_name='Blood Glucose',
-        subscription_categories=['58'],  # Appli 58: Glucose data
-        api_endpoint='/v2/measure',
+    "glucose": DataTypeConfig(
+        name="glucose",
+        display_name="Blood Glucose",
+        subscription_categories=["58"],  # Appli 58: Glucose data
+        api_endpoint="/v2/measure",
         api_method=APIMethod.GET,
-        api_action='getmeas',
+        api_action="getmeas",
         meastype=None,  # Glucose meastype TBD - not documented yet
-        response_processor='_process_withings_measurements',
+        response_processor="_process_withings_measurements",
         requires_date_range=True,
-        description='Blood glucose measurements'
+        description="Blood glucose measurements",
     ),
 }
 
@@ -215,83 +207,78 @@ WITHINGS_DATA_TYPES: Dict[str, DataTypeConfig] = {
 # FITBIT DATA TYPE MAPPINGS
 # ==============================================================================
 
-FITBIT_DATA_TYPES: Dict[str, DataTypeConfig] = {
-    'heart_rate': DataTypeConfig(
-        name='heart_rate',
-        display_name='Heart Rate',
-        subscription_categories=['activities'],  # Fitbit collection type
-        api_endpoint='/1/user/-/activities/heart/date/{date}/1d.json',
+FITBIT_DATA_TYPES: dict[str, DataTypeConfig] = {
+    "heart_rate": DataTypeConfig(
+        name="heart_rate",
+        display_name="Heart Rate",
+        subscription_categories=["activities"],  # Fitbit collection type
+        api_endpoint="/1/user/-/activities/heart/date/{date}/1d.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,  # Fitbit doesn't use meastypes
-        response_processor='_process_fitbit_heart_rate',
+        response_processor="_process_fitbit_heart_rate",
         requires_date_range=True,
-        description='Heart rate zones and intraday measurements'
+        description="Heart rate zones and intraday measurements",
     ),
-
-    'steps': DataTypeConfig(
-        name='steps',
-        display_name='Steps',
-        subscription_categories=['activities'],
-        api_endpoint='/1/user/-/activities/steps/date/{date}/1d.json',
+    "steps": DataTypeConfig(
+        name="steps",
+        display_name="Steps",
+        subscription_categories=["activities"],
+        api_endpoint="/1/user/-/activities/steps/date/{date}/1d.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,
-        response_processor='_process_fitbit_activity',
+        response_processor="_process_fitbit_activity",
         requires_date_range=True,
-        description='Daily step count and intraday data'
+        description="Daily step count and intraday data",
     ),
-
-    'weight': DataTypeConfig(
-        name='weight',
-        display_name='Weight',
-        subscription_categories=['body'],
-        api_endpoint='/1/user/-/body/log/weight/date/{date}.json',
+    "weight": DataTypeConfig(
+        name="weight",
+        display_name="Weight",
+        subscription_categories=["body"],
+        api_endpoint="/1/user/-/body/log/weight/date/{date}.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,
-        response_processor='_process_fitbit_weight',
+        response_processor="_process_fitbit_weight",
         requires_date_range=True,
-        description='Body weight logs'
+        description="Body weight logs",
     ),
-
-    'sleep': DataTypeConfig(
-        name='sleep',
-        display_name='Sleep Data',
-        subscription_categories=['sleep'],
-        api_endpoint='/1.2/user/-/sleep/date/{date}.json',
+    "sleep": DataTypeConfig(
+        name="sleep",
+        display_name="Sleep Data",
+        subscription_categories=["sleep"],
+        api_endpoint="/1.2/user/-/sleep/date/{date}.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,
-        response_processor='_process_fitbit_sleep',
+        response_processor="_process_fitbit_sleep",
         requires_date_range=True,
-        description='Sleep stages and quality metrics'
+        description="Sleep stages and quality metrics",
     ),
-
-    'ecg': DataTypeConfig(
-        name='ecg',
-        display_name='Electrocardiogram (ECG)',
-        subscription_categories=['activities'],  # ECG notifications come through activities
-        api_endpoint='/1/user/-/ecg/list.json',
+    "ecg": DataTypeConfig(
+        name="ecg",
+        display_name="Electrocardiogram (ECG)",
+        subscription_categories=["activities"],  # ECG notifications come through activities
+        api_endpoint="/1/user/-/ecg/list.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,
-        response_processor='_process_fitbit_ecg',
+        response_processor="_process_fitbit_ecg",
         requires_date_range=True,
-        description='ECG readings with AFib detection'
+        description="ECG readings with AFib detection",
     ),
-
-    'rr_intervals': DataTypeConfig(
-        name='rr_intervals',
-        display_name='HRV (RR Intervals)',
-        subscription_categories=['activities'],
-        api_endpoint='/1/user/-/hrv/date/{date}/all.json',
+    "rr_intervals": DataTypeConfig(
+        name="rr_intervals",
+        display_name="HRV (RR Intervals)",
+        subscription_categories=["activities"],
+        api_endpoint="/1/user/-/hrv/date/{date}/all.json",
         api_method=APIMethod.GET,
         api_action=None,
         meastype=None,
-        response_processor='_process_fitbit_hrv',
+        response_processor="_process_fitbit_hrv",
         requires_date_range=True,
-        description='Heart rate variability measurements'
+        description="Heart rate variability measurements",
     ),
 }
 
@@ -300,7 +287,7 @@ FITBIT_DATA_TYPES: Dict[str, DataTypeConfig] = {
 # COMBINED PROVIDER MAPPINGS
 # ==============================================================================
 
-PROVIDER_DATA_TYPE_MAPPINGS: Dict[Provider, Dict[str, DataTypeConfig]] = {
+PROVIDER_DATA_TYPE_MAPPINGS: dict[Provider, dict[str, DataTypeConfig]] = {
     Provider.WITHINGS: WITHINGS_DATA_TYPES,
     Provider.FITBIT: FITBIT_DATA_TYPES,
 }
@@ -310,7 +297,8 @@ PROVIDER_DATA_TYPE_MAPPINGS: Dict[Provider, Dict[str, DataTypeConfig]] = {
 # REVERSE MAPPINGS: SUBSCRIPTION CATEGORY → DATA TYPES
 # ==============================================================================
 
-def get_category_to_data_types_mapping(provider: Provider) -> Dict[str, List[str]]:
+
+def get_category_to_data_types_mapping(provider: Provider) -> dict[str, list[str]]:
     """
     Build reverse mapping from subscription categories to data types
 
@@ -325,7 +313,7 @@ def get_category_to_data_types_mapping(provider: Provider) -> Dict[str, List[str
             ...
         }
     """
-    category_mapping: Dict[str, List[str]] = {}
+    category_mapping: dict[str, list[str]] = {}
 
     data_types = PROVIDER_DATA_TYPE_MAPPINGS.get(provider, {})
     for data_type_name, config in data_types.items():
@@ -337,7 +325,7 @@ def get_category_to_data_types_mapping(provider: Provider) -> Dict[str, List[str
     return category_mapping
 
 
-def resolve_subscription_categories(provider: Provider, data_types: List[str]) -> List[str]:
+def resolve_subscription_categories(provider: Provider, data_types: list[str]) -> list[str]:
     """
     Resolve which subscription categories are needed for requested data types
 
@@ -359,10 +347,10 @@ def resolve_subscription_categories(provider: Provider, data_types: List[str]) -
         if data_type in provider_mappings:
             categories.update(provider_mappings[data_type].subscription_categories)
 
-    return sorted(list(categories))
+    return sorted(categories)
 
 
-def get_data_type_config(provider: Provider, data_type: str) -> Optional[DataTypeConfig]:
+def get_data_type_config(provider: Provider, data_type: str) -> DataTypeConfig | None:
     """
     Get configuration for a specific data type on a provider
 
@@ -371,12 +359,12 @@ def get_data_type_config(provider: Provider, data_type: str) -> Optional[DataTyp
     return PROVIDER_DATA_TYPE_MAPPINGS.get(provider, {}).get(data_type)
 
 
-def get_supported_data_types(provider: Provider) -> List[str]:
+def get_supported_data_types(provider: Provider) -> list[str]:
     """Get list of all supported data types for a provider"""
     return list(PROVIDER_DATA_TYPE_MAPPINGS.get(provider, {}).keys())
 
 
-def validate_data_types(provider: Provider, data_types: List[str]) -> tuple[List[str], List[str]]:
+def validate_data_types(provider: Provider, data_types: list[str]) -> tuple[list[str], list[str]]:
     """
     Validate which data types are supported by the provider
 

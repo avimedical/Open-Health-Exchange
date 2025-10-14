@@ -2,14 +2,16 @@
 Unified base FHIR transformer - Eliminates duplication across all transformer files
 Provides common FHIR structure creation methods and validation patterns
 """
+
 import logging
-from datetime import datetime
-from typing import Any, Union
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any
 
-from ingestors.constants import DeviceData, Provider
+from django.utils import timezone
+
+from ingestors.constants import Provider
 from ingestors.health_data_constants import MeasurementSource
-
 
 logger = logging.getLogger(__name__)
 
@@ -24,24 +26,23 @@ class BaseFHIRTransformer(ABC):
 
     # Common FHIR system URLs
     FHIR_SYSTEMS = {
-        'SNOMED': "http://snomed.info/sct",
-        'LOINC': "http://loinc.org",
-        'UCUM': "http://unitsofmeasure.org",
-        'OBSERVATION_CATEGORY': "http://terminology.hl7.org/CodeSystem/observation-category",
-        'OBSERVATION_VALUE': "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
-        'DEVICE_VERSION_TYPE': "http://terminology.hl7.org/CodeSystem/device-version-type",
-        'DEVICE_PROPERTY_TYPE': "http://terminology.hl7.org/CodeSystem/device-property-type",
-        'DEVICE_ASSOCIATION_CATEGORY': "http://hl7.org/fhir/device-association-category",
-        'DEVICE_ASSOCIATION_STATUS': "http://hl7.org/fhir/device-association-status",
-        'DEVICE_ASSOCIATION_OPERATION_STATUS': "http://hl7.org/fhir/device-association-operation-status",
-        'PROVIDER_SYSTEM': "https://open-health-exchange.com/provider",
-        'MEASUREMENT_SOURCE': "https://open-health-exchange.com/measurement-source"
+        "SNOMED": "http://snomed.info/sct",
+        "LOINC": "http://loinc.org",
+        "UCUM": "http://unitsofmeasure.org",
+        "OBSERVATION_CATEGORY": "http://terminology.hl7.org/CodeSystem/observation-category",
+        "OBSERVATION_VALUE": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "DEVICE_VERSION_TYPE": "http://terminology.hl7.org/CodeSystem/device-version-type",
+        "DEVICE_PROPERTY_TYPE": "http://terminology.hl7.org/CodeSystem/device-property-type",
+        "DEVICE_ASSOCIATION_CATEGORY": "http://hl7.org/fhir/device-association-category",
+        "DEVICE_ASSOCIATION_STATUS": "http://hl7.org/fhir/device-association-status",
+        "DEVICE_ASSOCIATION_OPERATION_STATUS": "http://hl7.org/fhir/device-association-operation-status",
+        "PROVIDER_SYSTEM": "https://open-health-exchange.com/provider",
+        "MEASUREMENT_SOURCE": "https://open-health-exchange.com/measurement-source",
     }
 
     @abstractmethod
     def transform(self, *args, **kwargs) -> dict[str, Any]:
         """Abstract method for transformation - must be implemented by subclasses"""
-        pass
 
     def create_fhir_coding(self, system: str, code: str, display: str) -> dict[str, Any]:
         """
@@ -49,14 +50,7 @@ class BaseFHIRTransformer(ABC):
 
         Eliminates duplication across all transformer classes
         """
-        return {
-            "coding": [{
-                "system": system,
-                "code": code,
-                "display": display
-            }],
-            "text": display
-        }
+        return {"coding": [{"system": system, "code": code, "display": display}], "text": display}
 
     def create_provider_system_url(self, provider: Provider, endpoint_type: str) -> str:
         """
@@ -69,11 +63,7 @@ class BaseFHIRTransformer(ABC):
         return f"https://api.{provider.value}.com/{endpoint_type}"
 
     def create_fhir_identifier(
-        self,
-        provider: Provider,
-        value: str,
-        endpoint_type: str,
-        use: str = "official"
+        self, provider: Provider, value: str, endpoint_type: str, use: str = "official"
     ) -> dict[str, Any]:
         """
         Unified FHIR identifier creation
@@ -84,7 +74,7 @@ class BaseFHIRTransformer(ABC):
             "use": use,
             "system": self.create_provider_system_url(provider, endpoint_type),
             "value": value,
-            "assigner": {"display": provider.value.title()}
+            "assigner": {"display": provider.value.title()},
         }
 
     def create_measurement_source_tags(self, measurement_source: MeasurementSource) -> list[dict[str, Any]]:
@@ -96,16 +86,18 @@ class BaseFHIRTransformer(ABC):
         source_display_map = {
             MeasurementSource.DEVICE: "Device measurement",
             MeasurementSource.USER: "User-entered measurement",
-            MeasurementSource.UNKNOWN: "Unknown source"
+            MeasurementSource.UNKNOWN: "Unknown source",
         }
 
         source_display = source_display_map.get(measurement_source, "Unknown source")
 
-        return [{
-            "system": self.FHIR_SYSTEMS['MEASUREMENT_SOURCE'],
-            "code": measurement_source.value,
-            "display": source_display
-        }]
+        return [
+            {
+                "system": self.FHIR_SYSTEMS["MEASUREMENT_SOURCE"],
+                "code": measurement_source.value,
+                "display": source_display,
+            }
+        ]
 
     def create_provider_tags(self, provider: Provider) -> list[dict[str, Any]]:
         """
@@ -114,22 +106,12 @@ class BaseFHIRTransformer(ABC):
         Standardizes provider tagging across all transformers
         """
         return [
-            {
-                "system": self.FHIR_SYSTEMS['OBSERVATION_VALUE'],
-                "code": "auto-generated",
-                "display": "Auto-generated"
-            },
-            {
-                "system": self.FHIR_SYSTEMS['PROVIDER_SYSTEM'],
-                "code": provider.value,
-                "display": provider.value.title()
-            }
+            {"system": self.FHIR_SYSTEMS["OBSERVATION_VALUE"], "code": "auto-generated", "display": "Auto-generated"},
+            {"system": self.FHIR_SYSTEMS["PROVIDER_SYSTEM"], "code": provider.value, "display": provider.value.title()},
         ]
 
     def create_fhir_meta(
-        self,
-        provider: Provider,
-        measurement_source: MeasurementSource | None = None
+        self, provider: Provider, measurement_source: MeasurementSource | None = None
     ) -> dict[str, Any]:
         """
         Unified FHIR meta section creation
@@ -141,31 +123,28 @@ class BaseFHIRTransformer(ABC):
         if measurement_source:
             tags.extend(self.create_measurement_source_tags(measurement_source))
 
-        return {
-            "source": f"#{provider.value}",
-            "tag": tags
-        }
+        return {"source": f"#{provider.value}", "tag": tags}
 
-    def safe_convert_value(self, value: Union[float, dict, str, int], target_type: type = float):
+    def safe_convert_value(self, value: float | dict | str | int, target_type: type = float):
         """
         Unified safe value conversion
 
         Handles type conversion with fallback for FHIR data consistency
         """
-        if isinstance(value, (int, float)) and target_type == float:
+        if isinstance(value, (int, float)) and target_type is float:
             return float(value)
         elif isinstance(value, str):
             try:
-                if target_type == float:
+                if target_type is float:
                     return float(value)
-                elif target_type == int:
+                elif target_type is int:
                     return int(value)
                 else:
                     return str(value)
             except ValueError:
-                return 0.0 if target_type == float else 0 if target_type == int else ""
+                return 0.0 if target_type is float else 0 if target_type is int else ""
         else:
-            return 0.0 if target_type == float else 0 if target_type == int else ""
+            return 0.0 if target_type is float else 0 if target_type is int else ""
 
     def create_fhir_timestamp(self, dt: datetime | None = None) -> str:
         """
@@ -173,7 +152,7 @@ class BaseFHIRTransformer(ABC):
 
         Ensures consistent ISO format with Z suffix
         """
-        timestamp = dt or datetime.utcnow()
+        timestamp = dt or timezone.now()
         return timestamp.isoformat() + "Z"
 
     def log_transformation(self, resource_type: str, identifier: str):
