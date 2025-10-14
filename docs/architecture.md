@@ -607,7 +607,7 @@ class HealthSyncConfig:
 - **Heart Rate** → `Observation` (LOINC: 8867-4)
 - **Steps** → `Observation` (LOINC: 55423-8)
 - **RR Intervals** → `Observation` (LOINC: 8637-1) + linked heart rate
-- **ECG** → `DiagnosticReport` (LOINC: 11524-6) + linked heart rate
+- **ECG** → `Observation` (LOINC: 8601-7) + linked heart rate
 - **Blood Pressure** → `Observation` (LOINC: 85354-9)
 
 #### Transformation Pipeline

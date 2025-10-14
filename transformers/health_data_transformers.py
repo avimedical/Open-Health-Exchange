@@ -153,14 +153,12 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
     def _transform_heart_rate_value(self, record: HealthDataRecord) -> dict[str, Any]:
         """Transform heart rate value to FHIR format"""
-        ucum_unit = HEALTH_DATA_UCUM_UNITS.get(record.unit, record.unit)
-
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": "beats/minute",
+                "unit": "bpm",
                 "system": "http://unitsofmeasure.org",
-                "code": ucum_unit,
+                "code": "{beats}/min",
             }
         }
 
@@ -171,7 +169,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 "value": self.safe_convert_value(record.value, float),
                 "unit": "steps",
                 "system": "http://unitsofmeasure.org",
-                "code": "1",  # UCUM code for count
+                "code": "[count]",  # UCUM code for count
             }
         }
 

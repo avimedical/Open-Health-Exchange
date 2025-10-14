@@ -144,7 +144,7 @@ HEALTH_DATA_LOINC_CODES = {
     HealthDataType.HEART_RATE: "8867-4",  # Heart rate
     HealthDataType.STEPS: "55423-8",  # Number of steps in unspecified time Pedometer
     HealthDataType.RR_INTERVALS: "8637-1",  # R-R interval
-    HealthDataType.ECG: "11524-6",  # EKG study
+    HealthDataType.ECG: "8601-7",  # EKG impression
     HealthDataType.BLOOD_PRESSURE: "85354-9",  # Blood pressure panel with all children optional
     HealthDataType.WEIGHT: "29463-7",  # Body weight
     HealthDataType.TEMPERATURE: "8310-5",  # Body temperature
@@ -154,19 +154,37 @@ HEALTH_DATA_LOINC_CODES = {
     HealthDataType.FAT_MASS: "73708-0",  # Fat mass by DEXA
 }
 
-# UCUM units for health data types
+# UCUM units for health data types (aligned with mobile app BaseUnit)
+# Maps display unit to UCUM code
 HEALTH_DATA_UCUM_UNITS = {
-    "bpm": "/min",  # beats per minute
-    "steps": "1",  # count
+    "bpm": "{beats}/min",  # beats per minute
+    "cal": "cal",  # calories
+    "cm": "cm",  # centimeter
+    "count": "[count]",  # count (for steps)
+    "steps": "[count]",  # steps (alternative mapping)
+    "°C": "Cel",  # degrees Celsius (UCUM standard)
+    "celsius": "Cel",  # Celsius (alternative)
+    "kg": "kg",  # kilograms
+    "kg/m²": "kg/m2",  # kilograms per square meter (BMI)
+    "l": "L",  # liter
+    "L": "L",  # liter (alternative)
+    "m": "m",  # meter
+    "uV": "uV",  # microvolt
+    "mmol/l": "mmol/L",  # millimole per liter
+    "mmol/L": "mmol/L",  # millimole per liter (alternative)
+    "mmol/mol": "mmol/mol",  # millimole per mole
+    "mg/dl": "mg/dL",  # milligram per deciliter
+    "mg/dL": "mg/dL",  # milligram per deciliter (alternative)
+    "mmHg": "mm[Hg]",  # millimeters of mercury (blood pressure)
     "ms": "ms",  # milliseconds
-    "mmHg": "mm[Hg]",  # blood pressure
-    "kg": "kg",  # weight
-    "lbs": "[lb_av]",  # pounds
-    "celsius": "Cel",  # Celsius
-    "fahrenheit": "[degF]",  # Fahrenheit
+    "min": "min",  # minutes
+    "minutes": "min",  # minutes (alternative)
     "%": "%",  # percentage
-    "minutes": "min",  # time in minutes
-    "hours": "h",  # time in hours
+    # Legacy/additional units
+    "lbs": "[lb_av]",  # pounds
+    "fahrenheit": "[degF]",  # Fahrenheit
+    "hours": "h",  # hours
+    "h": "h",  # hours (alternative)
     "m/s": "m/s",  # meters per second
     "g": "g",  # grams
 }

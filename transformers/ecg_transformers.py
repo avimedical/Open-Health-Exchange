@@ -1,6 +1,6 @@
 """
 FHIR R5 transformers for ECG data with proper panel structure and waveform storage
-Implements LOINC 34534-8 12-lead EKG panel with SampledData for waveforms
+Implements LOINC 8601-7 EKG impression with SampledData for waveforms
 Now inherits from BaseFHIRTransformer to eliminate duplication
 """
 
@@ -31,14 +31,14 @@ class ECGTransformer(BaseFHIRTransformer):
     def transform_ecg_to_fhir_panel(
         self, record: HealthDataRecord, patient_reference: str, device_reference: str | None = None
     ) -> dict[str, Any]:
-        """Transform ECG record to FHIR R5 Observation with 12-lead EKG panel structure"""
+        """Transform ECG record to FHIR R5 Observation with EKG impression structure"""
 
         # Extract ECG metadata
         metadata = record.metadata or {}
         ecg_metrics = metadata.get("ecg_metrics", {})
         waveform_data = metadata.get("waveform_data", {})
 
-        # Create base observation with LOINC 34534-8 (12 lead EKG panel)
+        # Create base observation with LOINC 8601-7 (EKG impression)
         observation: dict[str, Any] = {
             "resourceType": "Observation",
             "status": "final",
@@ -54,8 +54,8 @@ class ECGTransformer(BaseFHIRTransformer):
                 }
             ],
             "code": {
-                "coding": [{"system": "http://loinc.org", "code": "34534-8", "display": "12 lead EKG panel"}],
-                "text": "12-lead Electrocardiogram Panel",
+                "coding": [{"system": "http://loinc.org", "code": "8601-7", "display": "EKG impression"}],
+                "text": "Electrocardiogram",
             },
             "subject": {"reference": patient_reference},
             "effectiveDateTime": self.create_fhir_timestamp(record.timestamp),
@@ -92,9 +92,9 @@ class ECGTransformer(BaseFHIRTransformer):
                     "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}]},
                     "valueQuantity": {
                         "value": float(cast(int | float, record.value)),
-                        "unit": "/min",
+                        "unit": "bpm",
                         "system": "http://unitsofmeasure.org",
-                        "code": "/min",
+                        "code": "{beats}/min",
                     },
                 }
             )
