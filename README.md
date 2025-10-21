@@ -62,3 +62,69 @@ Image name:
 - `ghcr.io/<owner>/open-health-exchange` (lowercase)
 
 Poetry 2.2.x is used in CI and the Dockerfile. Tests are executed with real Valkey and Postgres services.
+
+## Development Guidelines
+
+### Commit Message Format
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) for consistent commit messages. Commit messages are automatically validated via pre-commit hooks.
+
+**Format:**
+```
+<type>: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Allowed commit types:**
+- `feat:` - A new feature
+- `fix:` - A bug fix (including hotfixes)
+- `docs:` - Documentation only changes
+- `style:` - Changes that don't affect code meaning (formatting, etc.)
+- `refactor:` - Code change that neither fixes a bug nor adds a feature
+- `perf:` - Performance improvement
+- `test:` - Adding missing tests or correcting existing tests
+- `build:` - Changes to build system or dependencies
+- `ci:` - Changes to CI configuration files and scripts
+- `chore:` - Other changes that don't modify src or test files
+- `revert:` - Reverts a previous commit
+
+**Examples:**
+```bash
+git commit -m "feat: add Withings OAuth integration"
+git commit -m "fix: resolve timezone handling in ECG transformer"
+git commit -m "refactor: update FHIR client initialization"
+git commit -m "docs: add commit message guidelines to README"
+git commit -m "chore: setup pre-commit hooks"
+```
+
+### Pre-commit Hooks
+
+Pre-commit hooks are configured to run automatically before each commit:
+- **Ruff linting** with auto-fix
+- **Ruff formatting** for consistent code style
+- **Commit message validation** (Conventional Commits)
+- **File checks** (large files, merge conflicts, trailing whitespace, etc.)
+
+**First-time setup:**
+```bash
+poetry install
+poetry run pre-commit install
+poetry run pre-commit install --hook-type commit-msg
+```
+
+**Manual execution:**
+```bash
+# Run all hooks on all files
+poetry run pre-commit run --all-files
+
+# Run hooks on staged files only
+poetry run pre-commit run
+```
+
+**Bypass hooks (use sparingly):**
+```bash
+git commit --no-verify -m "fix: emergency hotfix"
+```

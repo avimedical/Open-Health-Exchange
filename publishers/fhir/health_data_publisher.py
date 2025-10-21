@@ -20,7 +20,9 @@ class HealthDataPublisher:
     def __init__(self):
         self.fhir_client = FHIRClient()
 
-    def publish_health_observations(self, observations: list[dict[str, Any]], batch_size: int | None = None) -> dict[str, Any]:
+    def publish_health_observations(
+        self, observations: list[dict[str, Any]], batch_size: int | None = None
+    ) -> dict[str, Any]:
         """
         Publish health observations to the FHIR server
 

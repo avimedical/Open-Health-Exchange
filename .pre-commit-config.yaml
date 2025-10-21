@@ -1,0 +1,42 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version should match the version in pyproject.toml
+    rev: v0.14.0
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix]
+      # Run the formatter
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+      # Check for merge conflicts
+      - id: check-merge-conflict
+      # Check YAML files for parseable syntax
+      - id: check-yaml
+        exclude: ^\.github/workflows/
+      # Check JSON files for parseable syntax
+      - id: check-json
+        exclude: ^\.vscode/
+      # Check for debugger imports and breakpoints
+      - id: debug-statements
+      # Make sure files end in a newline
+      - id: end-of-file-fixer
+      # Trim trailing whitespace
+      - id: trailing-whitespace
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.9.1
+    hooks:
+      # Validate commit messages follow Conventional Commits format
+      - id: commitizen
+        stages: [commit-msg]
