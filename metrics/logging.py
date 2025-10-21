@@ -8,8 +8,6 @@ import traceback
 from datetime import UTC, datetime
 from typing import Any
 
-from django.utils import timezone
-
 
 class JsonFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
