@@ -3,6 +3,7 @@ FHIR Client for interacting with FHIR server
 """
 
 import logging
+from typing import Any, cast
 
 import requests
 from django.conf import settings
@@ -47,7 +48,7 @@ class FHIRClient:
             "Expires": "0",
         }
 
-    def search_resource(self, resource_type: str, params: dict | None = None) -> dict:
+    def search_resource(self, resource_type: str, params: dict | None = None) -> dict[Any, Any]:
         """
         Search for FHIR resources
 
@@ -65,12 +66,12 @@ class FHIRClient:
                 url, headers=self._get_headers(), params=params or {}, timeout=settings.FHIR_CLIENT_CONFIG["TIMEOUT"]
             )
             response.raise_for_status()
-            return response.json()
+            return cast(dict[Any, Any], response.json())
         except requests.exceptions.RequestException as e:
             logger.error(f"Error searching {resource_type}: {e}")
             raise
 
-    def get_resource(self, resource_type: str, resource_id: str) -> dict:
+    def get_resource(self, resource_type: str, resource_id: str) -> dict[Any, Any]:
         """
         Get a specific FHIR resource by ID
 
@@ -86,12 +87,12 @@ class FHIRClient:
         try:
             response = requests.get(url, headers=self._get_headers(), timeout=settings.FHIR_CLIENT_CONFIG["TIMEOUT"])
             response.raise_for_status()
-            return response.json()
+            return cast(dict[Any, Any], response.json())
         except requests.exceptions.RequestException as e:
             logger.error(f"Error getting {resource_type}/{resource_id}: {e}")
             raise
 
-    def create_resource(self, resource_type: str, resource_data: dict) -> dict:
+    def create_resource(self, resource_type: str, resource_data: dict) -> dict[Any, Any]:
         """
         Create a new FHIR resource
 
@@ -112,14 +113,14 @@ class FHIRClient:
                 url, headers=self._get_headers(), json=resource_data, timeout=settings.FHIR_CLIENT_CONFIG["TIMEOUT"]
             )
             response.raise_for_status()
-            return response.json()
+            return cast(dict[Any, Any], response.json())
         except requests.exceptions.RequestException as e:
             logger.error(f"Error creating {resource_type}: {e}")
             if e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             raise
 
-    def update_resource(self, resource_type: str, resource_id: str, resource_data: dict) -> dict:
+    def update_resource(self, resource_type: str, resource_id: str, resource_data: dict) -> dict[Any, Any]:
         """
         Update an existing FHIR resource
 
@@ -142,7 +143,7 @@ class FHIRClient:
                 url, headers=self._get_headers(), json=resource_data, timeout=settings.FHIR_CLIENT_CONFIG["TIMEOUT"]
             )
             response.raise_for_status()
-            return response.json()
+            return cast(dict[Any, Any], response.json())
         except requests.exceptions.RequestException as e:
             logger.error(f"Error updating {resource_type}/{resource_id}: {e}")
             if e.response is not None and hasattr(e.response, "text"):
@@ -166,7 +167,7 @@ class FHIRClient:
             logger.error(f"Error deleting {resource_type}/{resource_id}: {e}")
             raise
 
-    def find_resource_by_identifier(self, resource_type: str, system: str, value: str) -> dict | None:
+    def find_resource_by_identifier(self, resource_type: str, system: str, value: str) -> dict[Any, Any] | None:
         """
         Find a FHIR resource by its identifier
 
@@ -185,7 +186,9 @@ class FHIRClient:
         if bundle.get("total", 0) > 0:
             entries = bundle.get("entry", [])
             if entries:
-                return entries[0].get("resource")
+                resource = entries[0].get("resource")
+                if resource:
+                    return cast(dict[Any, Any], resource)
 
         return None
 

@@ -4,7 +4,7 @@ Handles provider-specific webhook formats and extracts sync information
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from django.utils import dateparse, timezone
@@ -71,8 +71,8 @@ class WebhookPayloadProcessor:
             date_range = None
             if "startdate" in payload and "enddate" in payload:
                 try:
-                    start_time = datetime.fromtimestamp(int(payload["startdate"]), tz=timezone.utc)
-                    end_time = datetime.fromtimestamp(int(payload["enddate"]), tz=timezone.utc)
+                    start_time = datetime.fromtimestamp(int(payload["startdate"]), tz=UTC)
+                    end_time = datetime.fromtimestamp(int(payload["enddate"]), tz=UTC)
                     date_range = {"start": start_time.isoformat(), "end": end_time.isoformat()}
                 except (ValueError, OSError) as e:
                     logger.warning(f"Invalid date range in Withings webhook: {e}")
@@ -159,7 +159,7 @@ class WebhookPayloadProcessor:
                     try:
                         sync_date = dateparse.parse_date(date_str)
                         if sync_date:
-                            start_time = datetime.combine(sync_date, datetime.min.time(), tzinfo=timezone.utc)
+                            start_time = datetime.combine(sync_date, datetime.min.time(), tzinfo=UTC)
                             end_time = start_time + timedelta(days=1)
                         else:
                             raise ValueError(f"Could not parse date: {date_str}")

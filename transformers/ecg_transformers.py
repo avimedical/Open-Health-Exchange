@@ -91,7 +91,7 @@ class ECGTransformer(BaseFHIRTransformer):
                 {
                     "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}]},
                     "valueQuantity": {
-                        "value": float(cast(int | float, record.value)),
+                        "value": float(record.value),
                         "unit": "bpm",
                         "system": "http://unitsofmeasure.org",
                         "code": "{beats}/min",

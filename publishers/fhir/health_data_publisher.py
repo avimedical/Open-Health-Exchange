@@ -20,7 +20,7 @@ class HealthDataPublisher:
     def __init__(self):
         self.fhir_client = FHIRClient()
 
-    def publish_health_observations(self, observations: list[dict[str, Any]], batch_size: int = None) -> dict[str, Any]:
+    def publish_health_observations(self, observations: list[dict[str, Any]], batch_size: int | None = None) -> dict[str, Any]:
         """
         Publish health observations to the FHIR server
 
@@ -31,7 +31,7 @@ class HealthDataPublisher:
         Returns:
             Publishing result with statistics
         """
-        result = {
+        result: dict[str, Any] = {
             "total_observations": len(observations),
             "published_successfully": 0,
             "failed_observations": 0,
@@ -78,7 +78,7 @@ class HealthDataPublisher:
 
     def _publish_observation_batch(self, observations: list[dict[str, Any]], batch_number: int) -> dict[str, Any]:
         """Publish a batch of observations"""
-        batch_result = {
+        batch_result: dict[str, Any] = {
             "batch_number": batch_number,
             "total": len(observations),
             "successful": 0,
