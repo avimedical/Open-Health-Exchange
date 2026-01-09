@@ -204,7 +204,7 @@ class HealthDataSyncService:
         """Publish FHIR observations to server"""
         try:
             # Get batch size from sync params
-            batch_size = sync_params.get("batch_size", settings.BATCH_SIZES["PUBLISHER"])
+            batch_size = sync_params.get("batch_size", settings.HEALTH_DATA_CONFIG["BATCH_SIZES"]["PUBLISHER"])
 
             # Publish observations
             publish_result = self.fhir_publisher.publish_health_observations(

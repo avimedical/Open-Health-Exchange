@@ -466,6 +466,7 @@ WEBHOOK_CONFIG = {
 CIRCUIT_BREAKER_CONFIG = {
     "TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_TIMEOUT", "60.0")),  # Eliminates 3 hardcoded timeout=60.0
     "FAILURE_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
+    "SUCCESS_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", "2")),  # Externalized per PR review
     "FHIR_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
     "WEBHOOK_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
     "PROVIDER_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
@@ -537,4 +538,37 @@ OAUTH_PROVIDER_URLS = {
         "API_BASE": "https://api.fitbit.com",
         "PROFILE_URL": "https://api.fitbit.com/1/user/-/profile.json",
     },
+}
+
+# FHIR Compatibility Configuration
+# Defaults to legacy mode for backwards compatibility with inwithings clients
+FHIR_COMPATIBILITY_CONFIG = {
+    # Format mode: "legacy" (inwithings-compatible) or "modern" (FHIR R5 best practices)
+    "FORMAT_MODE": os.environ.get("FHIR_FORMAT_MODE", "legacy"),
+    # Identifier generation: "jenkins_hash" (inwithings) or "modern" (UUID-based)
+    "IDENTIFIER_STRATEGY": os.environ.get("FHIR_IDENTIFIER_STRATEGY", "jenkins_hash"),
+    # Observation status: "registered" (inwithings) or "final" (modern)
+    "OBSERVATION_STATUS": os.environ.get("FHIR_OBSERVATION_STATUS", "registered"),
+    # Include issued field with sync timestamp (inwithings behavior)
+    "INCLUDE_ISSUED_FIELD": os.environ.get("FHIR_INCLUDE_ISSUED", "true").lower() == "true",
+    # Device info mode: "extension" (inwithings) or "reference" (separate Device resources)
+    "DEVICE_INFO_MODE": os.environ.get("FHIR_DEVICE_INFO_MODE", "extension"),
+    # Include device-model extension (per PR review feedback)
+    "INCLUDE_DEVICE_MODEL_EXTENSION": os.environ.get("FHIR_INCLUDE_DEVICE_MODEL_EXT", "true").lower() == "true",
+    # Bundle type: "batch" (inwithings, idempotent) or "transaction" (modern)
+    "BUNDLE_TYPE": os.environ.get("FHIR_BUNDLE_TYPE", "batch"),
+    # Bundle method: "PUT" (inwithings, idempotent) or "POST" (modern)
+    "BUNDLE_METHOD": os.environ.get("FHIR_BUNDLE_METHOD", "PUT"),
+    # Emit separate HR observation when ECG is processed (per PR review feedback)
+    "ECG_EMIT_SEPARATE_HR": os.environ.get("FHIR_ECG_EMIT_HR", "true").lower() == "true",
+    # Enable observation linking via derivedFrom/hasMember (per PR review feedback)
+    "ENABLE_OBSERVATION_LINKING": os.environ.get("FHIR_ENABLE_OBS_LINKING", "true").lower() == "true",
+    # LOINC code overrides for backwards compatibility
+    "LOINC_OVERRIDES": {
+        "steps": os.environ.get("FHIR_LOINC_STEPS", "41950-7"),  # inwithings uses 41950-7
+    },
+    # Use coded AFib interpretation (N/DET/IND) instead of valueString
+    "ECG_AFIB_CODED_INTERPRETATION": os.environ.get("FHIR_ECG_AFIB_CODED", "true").lower() == "true",
+    # Identifier system URL template
+    "IDENTIFIER_SYSTEM_TEMPLATE": os.environ.get("FHIR_IDENTIFIER_SYSTEM", "https://api.{provider}.com/health-data"),
 }

@@ -44,7 +44,7 @@ class HealthDataPublisher:
 
         # Use default batch size from settings if not provided
         if batch_size is None:
-            batch_size = settings.BATCH_SIZES["PUBLISHER"]
+            batch_size = settings.HEALTH_DATA_CONFIG["BATCH_SIZES"]["PUBLISHER"]
 
         try:
             # Process observations in batches

@@ -174,7 +174,7 @@ def get_withings_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Withings API."""
     config = CircuitBreakerConfig(
         failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
-        success_threshold=2,  # Default success threshold
+        success_threshold=settings.CIRCUIT_BREAKER_CONFIG["SUCCESS_THRESHOLD"],
         timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
         exceptions=(Exception,),
     )
@@ -185,7 +185,7 @@ def get_fitbit_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Fitbit API."""
     config = CircuitBreakerConfig(
         failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
-        success_threshold=2,  # Default success threshold
+        success_threshold=settings.CIRCUIT_BREAKER_CONFIG["SUCCESS_THRESHOLD"],
         timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
         exceptions=(Exception,),
     )
