@@ -293,7 +293,7 @@ graph TB
 
 ### Health Data Integration
 - **python-social-auth**: OAuth2 provider integration
-- **withings-api**: Withings API client library
+- **requests**: HTTP library (direct Withings API calls)
 - **fitbit**: Fitbit API client library
 - **fhirpy**: FHIR R5 client library
 

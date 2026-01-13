@@ -727,10 +727,13 @@ class UnifiedHealthDataClient:
         """Fetch Fitbit ECG data"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
+        endpoints = self.config["ENDPOINTS"]["fitbit"]
+        base_url = endpoints["base_url"]
 
         try:
+            url = f"{base_url}/1/user/-/ecg/list.json"
             ecg_response = client.make_request(
-                "/1/user/-/ecg/list.json",
+                url,
                 params={
                     "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
                     "beforeDate": query.date_range.end.strftime("%Y-%m-%d"),
@@ -798,13 +801,16 @@ class UnifiedHealthDataClient:
         """Fetch Fitbit HRV data"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
+        endpoints = self.config["ENDPOINTS"]["fitbit"]
+        base_url = endpoints["base_url"]
 
         current_date = query.date_range.start.date()
         end_date_only = query.date_range.end.date()
 
         while current_date <= end_date_only:
             try:
-                hrv_response = client.make_request(f"/1/user/-/hrv/date/{current_date.strftime('%Y-%m-%d')}/all.json")
+                url = f"{base_url}/1/user/-/hrv/date/{current_date.strftime('%Y-%m-%d')}/all.json"
+                hrv_response = client.make_request(url)
 
                 if hrv_response and "hrv" in hrv_response:
                     for hrv_entry in hrv_response["hrv"]:

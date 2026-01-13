@@ -7,10 +7,9 @@ for backwards compatibility with the inwithings implementation.
 
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from django.conf import settings
-from django.utils import timezone
 
 
 def jenkins_one_at_a_time_hash(data: str) -> int:
@@ -61,9 +60,9 @@ def format_datetime_for_identifier(timestamp: datetime) -> str:
     """
     # Ensure UTC timezone
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
     else:
-        timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.astimezone(UTC)
 
     # Format matching inwithings: replace T with space
     iso_string = timestamp.isoformat()
@@ -143,7 +142,7 @@ def get_identifier_system(provider: str) -> str:
         Identifier system URL
     """
     config = getattr(settings, "FHIR_COMPATIBILITY_CONFIG", {})
-    template = config.get("IDENTIFIER_SYSTEM_TEMPLATE", "https://api.{provider}.com/health-data")
+    template: str = config.get("IDENTIFIER_SYSTEM_TEMPLATE", "https://api.{provider}.com/health-data")
     return template.format(provider=provider)
 
 

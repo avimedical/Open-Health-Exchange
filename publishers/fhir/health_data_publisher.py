@@ -143,7 +143,7 @@ class HealthDataPublisher:
                 return None
 
             # Search for existing observation
-            existing = self.fhir_client.find_resource_by_identifier("Observation", system, value)
+            existing: dict[str, Any] | None = self.fhir_client.find_resource_by_identifier("Observation", system, value)
 
             return existing
 

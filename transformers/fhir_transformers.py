@@ -8,11 +8,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
-from django.utils import timezone
-
 from ingestors.constants import DeviceData, DeviceType
 
 from .base_fhir_transformer import BaseFHIRTransformer
+from .identifier_utils import generate_resource_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +63,12 @@ class DeviceTransformer(BaseFHIRTransformer):
 
     def transform(self, device: DeviceData) -> dict[str, Any]:
         """Transform device data to FHIR Device resource"""
-        # Use ONLY the raw device ID from the provider
-        device_id = device.provider_device_id
+        # Generate deterministic UUID for Device resource ID
+        resource_id = generate_resource_uuid("Device", f"{device.provider.value}:{device.provider_device_id}")
 
         fhir_device = {
             "resourceType": "Device",
-            "id": device_id,
+            "id": resource_id,
             "identifier": [self.create_fhir_identifier(device.provider, device.provider_device_id, "device-id")],
             "status": "active",
             "manufacturer": device.manufacturer,
@@ -88,7 +87,7 @@ class DeviceTransformer(BaseFHIRTransformer):
         if properties := self._create_properties(device):
             fhir_device["property"] = properties
 
-        self.log_transformation("Device", device.provider_device_id)
+        self.log_transformation("Device", resource_id)
         return fhir_device
 
     # _create_identifier removed - now using unified create_fhir_identifier from base class
@@ -153,7 +152,7 @@ class DeviceTransformer(BaseFHIRTransformer):
     def _create_note(self, device: DeviceData) -> dict[str, Any]:
         """Create device note"""
         return {
-            "time": timezone.now().isoformat() + "Z",
+            "time": self.create_fhir_timestamp(),
             "text": f"Device synchronized from {device.provider.title()} Health Platform",
         }
 
@@ -166,14 +165,17 @@ class DeviceAssociationTransformer(BaseFHIRTransformer):
 
     def transform(self, device: DeviceData, patient_ref: str, device_ref: str) -> dict[str, Any]:
         """Transform to FHIR DeviceAssociation resource"""
-        # Create unique association ID using device ID and patient ID
-        patient_id = patient_ref.split("/")[-1]  # Extract patient ID from reference
-        association_id = f"{device.provider_device_id}-{patient_id}"
+        # Extract patient ID from reference
+        patient_id = patient_ref.split("/")[-1]
+        # Generate deterministic UUID for DeviceAssociation resource ID
+        resource_id = generate_resource_uuid(
+            "DeviceAssociation", f"{device.provider.value}:{device.provider_device_id}:{patient_id}"
+        )
         timestamp = self.create_fhir_timestamp()
 
         return {
             "resourceType": "DeviceAssociation",
-            "id": association_id,
+            "id": resource_id,
             "identifier": [
                 self.create_fhir_identifier(device.provider, device.provider_device_id, "device-association")
             ],

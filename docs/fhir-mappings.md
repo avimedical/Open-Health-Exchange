@@ -48,14 +48,14 @@ FHIR Device resources represent physical health monitoring devices and their cap
 ```json
 {
   "resourceType": "Device",
-  "id": "withings-scale-12345",
+  "id": "6ecef061-b47c-5bf6-ac7f-5bc2590ab1f2",
   "identifier": [
     {
       "use": "official",
       "system": "https://api.withings.com/device-id",
       "value": "12345",
       "assigner": {
-        "display": "Withings Health Platform"
+        "display": "Withings"
       }
     }
   ],
@@ -173,19 +173,19 @@ DeviceAssociation resources link devices to patients and define the relationship
 ```json
 {
   "resourceType": "DeviceAssociation",
-  "id": "withings-scale-12345-patient-67890",
+  "id": "5644c629-d7bc-5ba5-ad81-4d38d3c9898f",
   "identifier": [
     {
       "use": "official",
       "system": "https://api.withings.com/device-association",
-      "value": "12345-association",
+      "value": "12345",
       "assigner": {
-        "display": "Withings Health Platform"
+        "display": "Withings"
       }
     }
   ],
   "device": {
-    "reference": "Device/withings-scale-12345"
+    "reference": "Device/6ecef061-b47c-5bf6-ac7f-5bc2590ab1f2"
   },
   "category": [
     {
@@ -263,7 +263,7 @@ graph TB
         WT --> L3[29463-7<br/>Body weight]
         BP --> L4[85354-9<br/>Systolic BP<br/>8462-4<br/>Diastolic BP]
         TM --> L5[8310-5<br/>Body temperature]
-        SP --> L6[2708-6<br/>Oxygen saturation]
+        SP --> L6[59408-5<br/>Oxygen saturation]
     end
 
     subgraph "FHIR Categories"
@@ -281,12 +281,12 @@ graph TB
 ```json
 {
   "resourceType": "Observation",
-  "id": "heart-rate-2023-12-07-103000",
+  "id": "a1b2c3d4-e5f6-5a7b-8c9d-0e1f2a3b4c5d",
   "identifier": [
     {
-      "use": "official",
-      "system": "https://api.withings.com/measurement-id",
-      "value": "measurement-12345-heart-rate"
+      "use": "secondary",
+      "system": "https://api.withings.com/health-data",
+      "value": "1234567890"
     }
   ],
   "status": "final",
@@ -322,17 +322,22 @@ graph TB
     "code": "/min"
   },
   "device": {
-    "reference": "Device/withings-scale-12345"
+    "reference": "Device/6ecef061-b47c-5bf6-ac7f-5bc2590ab1f2"
   },
   "meta": {
+    "source": "#withings",
     "tag": [
       {
-        "system": "https://open-health-exchange.org/provider",
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
         "code": "withings",
         "display": "Withings"
       }
-    ],
-    "source": "https://api.withings.com"
+    ]
   }
 }
 ```
@@ -342,12 +347,12 @@ graph TB
 ```json
 {
   "resourceType": "Observation",
-  "id": "steps-2023-12-07-daily",
+  "id": "b2c3d4e5-f6a7-5b8c-9d0e-1f2a3b4c5d6e",
   "identifier": [
     {
-      "use": "official",
-      "system": "https://api.fitbit.com/measurement-id",
-      "value": "steps-daily-20231207"
+      "use": "secondary",
+      "system": "https://api.fitbit.com/health-data",
+      "value": "9876543210"
     }
   ],
   "status": "final",
@@ -386,17 +391,22 @@ graph TB
     "code": "{steps}"
   },
   "device": {
-    "reference": "Device/fitbit-tracker-67890"
+    "reference": "Device/c3d4e5f6-a7b8-5c9d-0e1f-2a3b4c5d6e7f"
   },
   "meta": {
+    "source": "#fitbit",
     "tag": [
       {
-        "system": "https://open-health-exchange.org/provider",
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
         "code": "fitbit",
         "display": "Fitbit"
       }
-    ],
-    "source": "https://api.fitbit.com"
+    ]
   }
 }
 ```
@@ -414,17 +424,18 @@ graph TB
 | Body Temperature | 8310-5 | Body temperature | Cel, [degF] | vital-signs |
 | Systolic BP | 8480-6 | Systolic blood pressure | mm[Hg] | vital-signs |
 | Diastolic BP | 8462-4 | Diastolic blood pressure | mm[Hg] | vital-signs |
-| SpO2 | 2708-6 | Oxygen saturation in Arterial blood | % | vital-signs |
+| SpO2 | 59408-5 | Oxygen saturation in Arterial blood by Pulse oximetry | % | vital-signs |
 
 ### Extended Health Data Types
 
 | Data Type | LOINC Code | Display Name | UCUM Unit | FHIR Category |
 |-----------|------------|--------------|-----------|---------------|
-| RR Intervals | 80404-7 | R-R interval.beat to beat by EKG | ms | vital-signs |
+| RR Intervals | 8637-1 | R-R interval | ms | vital-signs |
 | Sleep Duration | 93832-4 | Sleep duration | h | activity |
 | Energy Expenditure | 41981-2 | Calories burned | kcal | activity |
 | Distance Walked | 41953-1 | Distance walked | m, km | activity |
 | Body Fat Percentage | 41982-0 | Percentage body fat | % | vital-signs |
+| Blood Glucose | 2339-0 | Glucose in Blood | mg/dL, mmol/L | laboratory |
 
 ## UCUM Unit Conversions
 
@@ -595,16 +606,16 @@ graph TB
     end
 
     subgraph "Device Context"
-        DEV1[Device/withings-scale-123]
-        DEV2[Device/fitbit-tracker-456]
-        DA1[DeviceAssociation/scale-patient-link]
-        DA2[DeviceAssociation/tracker-patient-link]
+        DEV1[Device/6ecef061-b47c-...]
+        DEV2[Device/c3d4e5f6-a7b8-...]
+        DA1[DeviceAssociation/5644c629-d7bc-...]
+        DA2[DeviceAssociation/d4e5f6a7-b8c9-...]
     end
 
     subgraph "Clinical Data"
-        OBS1[Observation/weight-measurement]
-        OBS2[Observation/steps-daily]
-        OBS3[Observation/heart-rate]
+        OBS1[Observation/a1b2c3d4-e5f6-...]
+        OBS2[Observation/b2c3d4e5-f6a7-...]
+        OBS3[Observation/c3d4e5f6-a7b8-...]
     end
 
     PAT --> DA1
@@ -618,6 +629,57 @@ graph TB
     PAT --> OBS2
     PAT --> OBS3
 ```
+
+## Resource Identifier Strategy
+
+### UUID Generation
+
+All FHIR resources use deterministic UUID v5 identifiers for the `id` field. This ensures:
+
+1. **Idempotency**: The same input data always produces the same UUID
+2. **Uniqueness**: Different data produces different UUIDs
+3. **Traceability**: Resources can be referenced consistently across systems
+
+#### UUID Generation Formula
+
+```python
+# UUID v5 generation with DNS namespace
+namespace = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+
+# Device ID
+device_uuid = uuid5(namespace, f"Device:{provider}:{provider_device_id}")
+# Example: "Device:withings:12345" -> "6ecef061-b47c-5bf6-ac7f-5bc2590ab1f2"
+
+# DeviceAssociation ID
+association_uuid = uuid5(namespace, f"DeviceAssociation:{provider}:{provider_device_id}:{patient_id}")
+# Example: "DeviceAssociation:withings:12345:patient-67890" -> "5644c629-d7bc-5ba5-ad81-4d38d3c9898f"
+
+# Observation ID
+observation_uuid = uuid5(namespace, f"Observation:{patient_id}:{timestamp_iso}:{loinc_code}")
+# Example: "Observation:patient-123:2023-12-07T10:30:00+00:00:8867-4" -> "a1b2c3d4-e5f6-5a7b-8c9d-0e1f2a3b4c5d"
+```
+
+### Identifier Systems
+
+| Resource Type | Identifier Use | System URL Template |
+|---------------|----------------|---------------------|
+| Device | `official` | `https://api.{provider}.com/device-id` |
+| DeviceAssociation | `official` | `https://api.{provider}.com/device-association` |
+| Observation | `secondary` | `https://api.{provider}.com/health-data` |
+
+### Observation Identifier Generation
+
+Observation identifiers support two strategies for backwards compatibility:
+
+1. **Jenkins Hash (Legacy)**: Uses Jenkins One-at-a-Time hash for inwithings compatibility
+   - Input: `{patient_id}:{datetime}:{loinc_code}`
+   - Output: 32-bit integer as string (e.g., `"1234567890"`)
+
+2. **Modern UUID**: Uses UUID v5 for deterministic identifiers
+   - Input: `{patient_id}:{datetime}:{loinc_code}`
+   - Output: UUID string (e.g., `"a1b2c3d4-e5f6-5a7b-8c9d-0e1f2a3b4c5d"`)
+
+The strategy is configurable via `FHIR_COMPATIBILITY_CONFIG["IDENTIFIER_STRATEGY"]` setting.
 
 ## Error Handling and Data Quality
 

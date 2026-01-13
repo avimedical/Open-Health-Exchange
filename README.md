@@ -54,7 +54,7 @@ Services:
 ## CI/CD
 
 GitHub Actions are configured to:
-- Run lint (flake8) and tests (pytest) on pull requests to `main`
+- Run lint (ruff) and tests (pytest) on pull requests to `main`
 - Build the Docker image on PRs (no push)
 - Build and push to GHCR on `main` pushes
 

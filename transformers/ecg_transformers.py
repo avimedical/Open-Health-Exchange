@@ -12,11 +12,10 @@ Supports backwards compatibility with inwithings:
 import logging
 from typing import Any
 
-from django.utils import timezone
-
 from ingestors.health_data_constants import HealthDataRecord
 
 from .base_fhir_transformer import BaseFHIRTransformer
+from .identifier_utils import generate_resource_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +75,16 @@ class ECGTransformer(BaseFHIRTransformer):
         ecg_metrics = metadata.get("ecg_metrics", {})
         waveform_data = metadata.get("waveform_data", {})
 
-        # Extract patient ID for identifier generation
+        # Extract patient ID for identifier and UUID generation
         patient_id = patient_reference.split("/")[-1] if "/" in patient_reference else patient_reference
+
+        # Generate deterministic UUID for ECG Observation resource ID
+        resource_id = generate_resource_uuid("Observation", f"{patient_id}:{record.timestamp.isoformat()}:8601-7")
 
         # Create base observation with LOINC 8601-7 (EKG impression)
         observation: dict[str, Any] = {
             "resourceType": "Observation",
+            "id": resource_id,
             "status": self.get_observation_status(),
             "category": [
                 {
@@ -144,16 +147,19 @@ class ECGTransformer(BaseFHIRTransformer):
             )
 
         # Component 2: Average heart rate during ECG (only in modern mode or when not emitting separate HR)
-        has_heart_rate = record.value and isinstance(record.value, int | float) and record.value > 0
+        # Extract numeric value with type narrowing for mypy
+        heart_rate_value: float | None = (
+            float(record.value) if isinstance(record.value, int | float) and record.value > 0 else None
+        )
         emit_separate_hr = config.get("ECG_EMIT_SEPARATE_HR", False)
 
-        if has_heart_rate and not emit_separate_hr:
+        if heart_rate_value is not None and not emit_separate_hr:
             # Modern mode: HR as component of ECG observation
             observation["component"].append(
                 {
                     "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}]},
                     "valueQuantity": {
-                        "value": float(record.value),
+                        "value": heart_rate_value,
                         "unit": "bpm",
                         "system": "http://unitsofmeasure.org",
                         "code": "{beats}/min",
@@ -206,19 +212,21 @@ class ECGTransformer(BaseFHIRTransformer):
             device_info.append(f"Firmware: {ecg_metrics['firmware_version']}")
         if ecg_metrics.get("feature_version"):
             device_info.append(f"Feature Version: {ecg_metrics['feature_version']}")
-        if sampling_frequency:
-            device_info.append(f"Sampling Frequency: {sampling_frequency} Hz")
+        # Get sampling frequency from waveform data if available
+        waveform_sampling_freq = waveform_data.get("sampling_frequency_hz")
+        if waveform_sampling_freq:
+            device_info.append(f"Sampling Frequency: {waveform_sampling_freq} Hz")
 
         if device_info:
             observation["note"] = [
                 {
-                    "time": timezone.now().isoformat() + "Z",
+                    "time": self.create_fhir_timestamp(),
                     "text": f"Synced from {record.provider.value.title()} Health Platform. Technical info: {'; '.join(device_info)}",
                 }
             ]
 
         # In legacy mode, emit separate HR observation linked to ECG
-        if emit_separate_hr and has_heart_rate:
+        if emit_separate_hr and heart_rate_value is not None:
             hr_observation = self._create_related_hr_observation(
                 record=record,
                 patient_reference=patient_reference,
@@ -337,9 +345,15 @@ class ECGTransformer(BaseFHIRTransformer):
         config = self.get_compatibility_config()
         metadata = record.metadata or {}
 
+        # Generate deterministic UUID for HR Observation resource ID (from ECG)
+        resource_id = generate_resource_uuid(
+            "Observation", f"{patient_id}:{record.timestamp.isoformat()}:8867-4:from-ecg"
+        )
+
         # Create HR observation
         hr_observation: dict[str, Any] = {
             "resourceType": "Observation",
+            "id": resource_id,
             "status": self.get_observation_status(),
             "category": [
                 {
@@ -359,7 +373,7 @@ class ECGTransformer(BaseFHIRTransformer):
             "subject": {"reference": patient_reference},
             "effectiveDateTime": self.create_fhir_timestamp(record.timestamp),
             "valueQuantity": {
-                "value": float(record.value),
+                "value": float(record.value) if isinstance(record.value, int | float) else 0.0,
                 "unit": "bpm",
                 "system": "http://unitsofmeasure.org",
                 "code": "{beats}/min",

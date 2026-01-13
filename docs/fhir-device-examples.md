@@ -94,8 +94,8 @@ This document provides comprehensive FHIR R5 examples for the major device types
         "coding": [
           {
             "system": "http://loinc.org",
-            "code": "131328-5",
-            "display": "Electrocardiogram"
+            "code": "8601-7",
+            "display": "EKG impression"
           }
         ]
       },
@@ -312,8 +312,8 @@ This document provides comprehensive FHIR R5 examples for the major device types
     "coding": [
       {
         "system": "http://loinc.org",
-        "code": "131328-5",
-        "display": "Electrocardiogram study"
+        "code": "8601-7",
+        "display": "EKG impression"
       }
     ],
     "text": "Single-lead ECG"
@@ -1149,8 +1149,8 @@ This document provides comprehensive FHIR R5 examples for the major device types
         "coding": [
           {
             "system": "http://loinc.org",
-            "code": "2708-6",
-            "display": "Oxygen saturation in Arterial blood"
+            "code": "59408-5",
+            "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
           }
         ]
       },
@@ -1285,8 +1285,8 @@ This document provides comprehensive FHIR R5 examples for the major device types
     "coding": [
       {
         "system": "http://loinc.org",
-        "code": "2708-6",
-        "display": "Oxygen saturation in Arterial blood"
+        "code": "59408-5",
+        "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
       }
     ],
     "text": "Oxygen saturation (SpO2)"
@@ -1452,8 +1452,8 @@ This document provides comprehensive FHIR R5 examples for the major device types
     "coding": [
       {
         "system": "http://loinc.org",
-        "code": "2708-6",
-        "display": "Oxygen saturation in Arterial blood"
+        "code": "59408-5",
+        "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
       }
     ],
     "text": "Sleep SpO2 variation"
@@ -1584,13 +1584,13 @@ This document provides comprehensive FHIR R5 examples for the major device types
 | Measurement | LOINC Code | Display Name | Unit |
 |-------------|------------|--------------|------|
 | Heart Rate | 8867-4 | Heart rate | /min |
-| ECG | 131328-5 | Electrocardiogram study | - |
+| ECG | 8601-7 | EKG impression | - |
 | Weight | 29463-7 | Body weight | kg |
 | BMI | 39156-5 | Body mass index (BMI) [Ratio] | kg/m2 |
 | Body Fat | 41982-0 | Percentage of body fat | % |
 | Systolic BP | 8480-6 | Systolic blood pressure | mmHg |
 | Diastolic BP | 8462-4 | Diastolic blood pressure | mmHg |
-| SpO2 | 2708-6 | Oxygen saturation in Arterial blood | % |
+| SpO2 | 59408-5 | Oxygen saturation in Arterial blood by Pulse oximetry | % |
 | Steps | 55423-8 | Number of steps | 1 |
 | Sleep | 93832-4 | Sleep study | - |
 

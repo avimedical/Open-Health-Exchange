@@ -265,8 +265,8 @@ class MockHealthDataSyncService(HealthDataSyncService):
     def __init__(self):
         # Use real FHIR publisher for testing, but mock data fetching
         super().__init__(fhir_publisher=None)  # Will use default HealthDataPublisher
-        self.published_observations = []
-        self.mock_records = []
+        self.published_observations: list[dict[str, Any]] = []
+        self.mock_records: list[HealthDataRecord] = []
 
     def _fetch_health_data(
         self, user_id: str, provider: Provider, data_types: list[HealthDataType], sync_params: dict[str, Any]

@@ -47,7 +47,7 @@ class TestMetrics:
 
     def __init__(self, test_name: str):
         self.test_name = test_name
-        self.start_time = None
+        self.start_time: float | None = None
         self.operations: list[dict[str, str]] = []
         self.logger = get_test_logger(test_name)
 

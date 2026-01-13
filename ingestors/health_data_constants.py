@@ -12,6 +12,15 @@ from django.utils import timezone
 from .constants import Provider
 
 
+def _create_fhir_timestamp(dt=None) -> str:
+    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
+    from datetime import UTC
+
+    timestamp = dt or timezone.now()
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
 class HealthDataType(StrEnum):
     """Types of health data we can sync"""
 
@@ -27,6 +36,7 @@ class HealthDataType(StrEnum):
     SLEEP = "sleep"
     PULSE_WAVE_VELOCITY = "pulse_wave_velocity"
     FAT_MASS = "fat_mass"
+    GLUCOSE = "glucose"
 
 
 class AggregationLevel(StrEnum):
@@ -136,7 +146,7 @@ class HealthSyncResult:
         if self.errors is None:
             self.errors = []
         if self.sync_timestamp is None:
-            self.sync_timestamp = timezone.now().isoformat() + "Z"
+            self.sync_timestamp = _create_fhir_timestamp()
 
 
 # LOINC codes for health data types
@@ -152,6 +162,7 @@ HEALTH_DATA_LOINC_CODES = {
     HealthDataType.SLEEP: "93832-4",  # Sleep study
     HealthDataType.PULSE_WAVE_VELOCITY: "8494-7",  # Pulse wave velocity
     HealthDataType.FAT_MASS: "73708-0",  # Fat mass by DEXA
+    HealthDataType.GLUCOSE: "2339-0",  # Glucose [Mass/volume] in Blood
 }
 
 # UCUM units for health data types (aligned with mobile app BaseUnit)
@@ -203,6 +214,7 @@ HEALTH_DATA_DISPLAY_NAMES = {
     HealthDataType.SLEEP: "Sleep data",
     HealthDataType.PULSE_WAVE_VELOCITY: "Pulse wave velocity",
     HealthDataType.FAT_MASS: "Fat mass",
+    HealthDataType.GLUCOSE: "Blood glucose",
 }
 
 # FHIR observation categories
@@ -219,6 +231,7 @@ HEALTH_DATA_FHIR_CATEGORIES = {
     HealthDataType.SLEEP: "activity",
     HealthDataType.PULSE_WAVE_VELOCITY: "vital-signs",
     HealthDataType.FAT_MASS: "vital-signs",
+    HealthDataType.GLUCOSE: "laboratory",
 }
 
 # =====================================================

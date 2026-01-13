@@ -79,7 +79,7 @@ class UnifiedWebhookHandler:
         self.validator = WebhookSignatureValidator()
         self.logger = logging.getLogger(__name__)
 
-    def handle_webhook(self, provider: Provider, request: HttpRequest) -> HttpResponse:
+    def handle_webhook(self, provider: Provider, request: HttpRequest) -> HttpResponse | Response:
         """
         Handle webhook for any provider
         Single source of truth for all webhook processing
@@ -121,9 +121,6 @@ class UnifiedWebhookHandler:
                     return HttpResponse(verify, content_type="text/plain", status=204)
                 else:
                     return HttpResponseBadRequest("Missing verify parameter")
-
-            case _:
-                return HttpResponseBadRequest(f"Unknown provider: {provider.value}")
 
     def _handle_health_check(self, provider: Provider, request: HttpRequest) -> HttpResponse:
         """Handle HEAD requests for health checks"""
@@ -181,9 +178,6 @@ class UnifiedWebhookHandler:
                 return self.validator.validate_withings_signature(request)
             case Provider.FITBIT:
                 return self.validator.validate_fitbit_signature(request)
-            case _:
-                self.logger.error(f"No signature validation for provider: {provider.value}")
-                return False
 
     def _parse_request_payload(
         self, provider: Provider, request: HttpRequest
@@ -197,11 +191,12 @@ class UnifiedWebhookHandler:
                 self.logger.warning(f"{provider.value} webhook received empty body")
                 return None
 
-            return json.loads(body_content)
+            parsed: dict[str, Any] | list[dict[str, Any]] = json.loads(body_content)
+            return parsed
 
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON in {provider.value} webhook: {e}")
-            self.logger.error(f"Raw body content: {request.body[:500]}")
+            self.logger.error(f"Raw body content: {request.body.decode('utf-8', errors='replace')[:500]}")
             return None
 
     def _process_webhook_payload(self, provider: Provider, payload: Any) -> list[dict[str, Any]]:

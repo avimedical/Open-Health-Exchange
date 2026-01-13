@@ -96,8 +96,8 @@ sequenceDiagram
 | Weight | 1 | 29463-7 | vital-signs |
 | Blood Pressure | 46 | 85354-9 (Systolic), 8462-4 (Diastolic) | vital-signs |
 | Body Temperature | 12 | 8310-5 | vital-signs |
-| RR Intervals | 44 | 80404-7 | vital-signs |
-| ECG | 50 | 131328-5 | procedure |
+| RR Intervals | 44 | 8637-1 | vital-signs |
+| ECG | 54 | 8601-7 | procedure |
 
 ## Fitbit Integration
 
@@ -177,7 +177,7 @@ sequenceDiagram
 | heart | 8867-4 | vital-signs | Heart rate zones, resting HR |
 | sleep | 93832-4 | activity | Sleep stages, duration |
 | body | 29463-7 | vital-signs | Weight, BMI, body fat |
-| spo2 | 2708-6 | vital-signs | Blood oxygen saturation |
+| spo2 | 59408-5 | vital-signs | Blood oxygen saturation |
 
 ## Authentication and Authorization
 

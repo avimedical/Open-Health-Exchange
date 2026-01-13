@@ -34,7 +34,7 @@ class BatteryLevel(Enum):
         if not text:
             return None
 
-        text_lower = text.lower()
+        text_lower = str(text).lower()
         mapping = {
             "high": cls.HIGH.value,
             "medium": cls.MEDIUM.value,

@@ -19,8 +19,18 @@ from ingestors.health_data_constants import (
 
 from .base_fhir_transformer import BaseFHIRTransformer
 from .ecg_transformers import ECGTransformer
+from .identifier_utils import generate_resource_uuid
 
 logger = logging.getLogger(__name__)
+
+
+def _create_fhir_timestamp(dt=None) -> str:
+    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
+    from datetime import UTC
+
+    timestamp = dt or timezone.now()
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class HealthDataTransformer(BaseFHIRTransformer):
@@ -56,7 +66,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
         # Get FHIR codes and mappings for non-ECG data
         # Use LOINC override if available (e.g., steps: 41950-7 for inwithings compatibility)
-        loinc_code = self.get_loinc_code(record.data_type.value, HEALTH_DATA_LOINC_CODES)
+        # Convert HealthDataType keys to strings for compatibility with get_loinc_code
+        loinc_codes_str: dict[str, str] = {k.value: v for k, v in HEALTH_DATA_LOINC_CODES.items()}
+        loinc_code = self.get_loinc_code(record.data_type.value, loinc_codes_str)
         if not loinc_code:
             loinc_code = HEALTH_DATA_LOINC_CODES.get(record.data_type)
         display_name = HEALTH_DATA_DISPLAY_NAMES.get(record.data_type)
@@ -65,9 +77,16 @@ class HealthDataTransformer(BaseFHIRTransformer):
         if not loinc_code:
             raise ValueError(f"No LOINC code defined for data type: {record.data_type}")
 
+        # Extract patient ID from reference for identifier and UUID generation
+        patient_id = patient_reference.split("/")[-1] if "/" in patient_reference else patient_reference
+
+        # Generate deterministic UUID for Observation resource ID
+        resource_id = generate_resource_uuid("Observation", f"{patient_id}:{record.timestamp.isoformat()}:{loinc_code}")
+
         # Create base observation with compatibility support
         observation: dict[str, Any] = {
             "resourceType": "Observation",
+            "id": resource_id,
             "status": self.get_observation_status(),  # "registered" in legacy mode, "final" in modern
             "category": [
                 {
@@ -85,7 +104,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 "text": display_name,
             },
             "subject": {"reference": patient_reference},
-            "effectiveDateTime": record.timestamp.isoformat() + "Z",
+            "effectiveDateTime": self.create_fhir_timestamp(record.timestamp),
             "meta": {
                 "source": f"#{record.provider.value}",
                 "tag": [
@@ -119,9 +138,6 @@ class HealthDataTransformer(BaseFHIRTransformer):
         elif device_reference:
             # Modern mode: device reference
             observation["device"] = {"reference": device_reference}
-
-        # Extract patient ID from reference for identifier generation
-        patient_id = patient_reference.split("/")[-1] if "/" in patient_reference else patient_reference
 
         # Add provider-specific identifier using compatibility strategy
         # For blood pressure, include both LOINC codes in identifier for uniqueness
@@ -163,7 +179,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
         if record.metadata:
             observation["note"] = [
                 {
-                    "time": timezone.now().isoformat() + "Z",
+                    "time": self.create_fhir_timestamp(),
                     "text": f"Synced from {record.provider.value.title()} Health Platform. Metadata: {record.metadata}",
                 }
             ]
@@ -550,7 +566,7 @@ class HealthDataBundle:
             "resourceType": "Bundle",
             "id": bundle_id,
             "type": bundle_type,
-            "timestamp": timezone.now().isoformat() + "Z",
+            "timestamp": _create_fhir_timestamp(),
             "total": len(entries),
             "entry": entries,
             "meta": {

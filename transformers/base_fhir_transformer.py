@@ -5,7 +5,7 @@ Provides common FHIR structure creation methods and validation patterns
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from django.utils import timezone
@@ -41,7 +41,7 @@ class BaseFHIRTransformer(ABC):
     }
 
     @abstractmethod
-    def transform(self, *args, **kwargs) -> dict[str, Any]:
+    def transform(self, *args, **kwargs) -> dict[str, Any] | list[dict[str, Any]]:
         """Abstract method for transformation - must be implemented by subclasses"""
 
     def create_fhir_coding(self, system: str, code: str, display: str) -> dict[str, Any]:
@@ -150,10 +150,14 @@ class BaseFHIRTransformer(ABC):
         """
         Unified FHIR timestamp creation
 
-        Ensures consistent ISO format with Z suffix
+        Ensures consistent ISO format with Z suffix for UTC times.
+        FHIR requires either Z suffix OR timezone offset, not both.
         """
         timestamp = dt or timezone.now()
-        return timestamp.isoformat() + "Z"
+        # Convert to UTC and format with Z suffix (not +00:00Z which is invalid)
+        utc_timestamp = timestamp.astimezone(UTC)
+        # Use strftime to avoid the +00:00 offset that isoformat() adds
+        return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     def log_transformation(self, resource_type: str, identifier: str):
         """
@@ -189,7 +193,7 @@ class BaseFHIRTransformer(ABC):
             LOINC code string or None if not found
         """
         config = self.get_compatibility_config()
-        overrides = config.get("LOINC_OVERRIDES", {})
+        overrides: dict[str, str] = config.get("LOINC_OVERRIDES", {})
 
         # Check for override first
         if data_type in overrides:
@@ -286,7 +290,8 @@ class BaseFHIRTransformer(ABC):
             "registered" in legacy mode, "final" in modern mode
         """
         config = self.get_compatibility_config()
-        return config.get("OBSERVATION_STATUS", "registered")
+        status: str = config.get("OBSERVATION_STATUS", "registered")
+        return status
 
     def should_include_issued_field(self) -> bool:
         """
@@ -296,7 +301,8 @@ class BaseFHIRTransformer(ABC):
             True in legacy mode (inwithings includes issued timestamp)
         """
         config = self.get_compatibility_config()
-        return config.get("INCLUDE_ISSUED_FIELD", True)
+        include: bool = config.get("INCLUDE_ISSUED_FIELD", True)
+        return include
 
     def should_use_device_extensions(self) -> bool:
         """

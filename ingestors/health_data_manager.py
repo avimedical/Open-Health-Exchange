@@ -91,8 +91,17 @@ class WithingsHealthDataManager(BaseHealthDataManager):
         super().__init__(Provider.WITHINGS)
 
     def get_supported_data_types(self) -> list[HealthDataType]:
-        """Withings supports heart rate, steps, weight, blood pressure"""
-        return [HealthDataType.HEART_RATE, HealthDataType.STEPS, HealthDataType.WEIGHT, HealthDataType.BLOOD_PRESSURE]
+        """Withings supports heart rate, steps, weight, blood pressure, ECG, temperature, SpO2, sleep"""
+        return [
+            HealthDataType.HEART_RATE,
+            HealthDataType.STEPS,
+            HealthDataType.WEIGHT,
+            HealthDataType.BLOOD_PRESSURE,
+            HealthDataType.ECG,
+            HealthDataType.TEMPERATURE,
+            HealthDataType.SPO2,
+            HealthDataType.SLEEP,
+        ]
 
     def fetch_health_data(
         self, user_id: str, data_types: list[HealthDataType], date_range: DateRange, sync_trigger: SyncTrigger
@@ -131,19 +140,20 @@ class WithingsHealthDataManager(BaseHealthDataManager):
 
     def _fetch_data_type(
         self,
-        client,  # Real WithingsAPIClient for Phase 2
+        client,  # UnifiedHealthDataClient
         user_id: str,
         data_type: HealthDataType,
         date_range: DateRange,
     ) -> list[HealthDataRecord]:
-        """Fetch specific data type from Withings"""
+        """Fetch specific data type from Withings using the unified client API"""
         records = []
 
         try:
+            # Use the unified client API to fetch data
+            raw_data = client.get_health_data(Provider.WITHINGS, data_type, user_id, date_range)
+
             if data_type == HealthDataType.HEART_RATE:
-                # Fetch heart rate measurements
-                measurements = client.get_heart_rate_data(user_id, date_range.start, date_range.end)
-                for measurement in measurements:
+                for measurement in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.HEART_RATE,
@@ -161,9 +171,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                     records.append(record)
 
             elif data_type == HealthDataType.STEPS:
-                # Fetch activity measurements (steps)
-                activities = client.get_activity_data(user_id, date_range.start, date_range.end)
-                for activity in activities:
+                for activity in raw_data:
                     if activity.get("steps", 0) > 0:
                         record = self._create_health_record(
                             user_id=user_id,
@@ -182,9 +190,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         records.append(record)
 
             elif data_type == HealthDataType.WEIGHT:
-                # Fetch weight measurements
-                measurements = client.get_weight_data(user_id, date_range.start, date_range.end)
-                for measurement in measurements:
+                for measurement in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.WEIGHT,
@@ -202,9 +208,110 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                     records.append(record)
 
             elif data_type == HealthDataType.BLOOD_PRESSURE:
-                # Note: Blood pressure not implemented in current API client
-                # Would need additional Withings API calls for blood pressure data
-                self.logger.warning("Blood pressure data not yet implemented for real Withings API")
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.BLOOD_PRESSURE,
+                        timestamp=measurement["timestamp"],
+                        value=float(measurement["value"]),
+                        unit="mmHg",
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "measurement_id": measurement.get("measurement_id"),
+                            "category": measurement.get("category"),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.UNKNOWN),
+                    )
+                    records.append(record)
+
+            elif data_type == HealthDataType.ECG:
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.ECG,
+                        timestamp=measurement["timestamp"],
+                        value={
+                            "heart_rate": measurement.get("heart_rate"),
+                            "signal_id": measurement.get("signal_id"),
+                            "afib_result": measurement.get("afib_result"),
+                            "afib_classification": measurement.get("afib_classification"),
+                        },
+                        unit="uV",
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "device_model": measurement.get("device_model"),
+                            "modified": (measurement["modified"].isoformat() if measurement.get("modified") else None),
+                            "qrs_interval": measurement.get("qrs_interval"),
+                            "pr_interval": measurement.get("pr_interval"),
+                            "qt_interval": measurement.get("qt_interval"),
+                            "qtc_interval": measurement.get("qtc_interval"),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.DEVICE),
+                    )
+                    records.append(record)
+
+            elif data_type == HealthDataType.TEMPERATURE:
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.TEMPERATURE,
+                        timestamp=measurement["timestamp"],
+                        value=float(measurement["value"]),
+                        unit="celsius",
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "measurement_id": measurement.get("measurement_id"),
+                            "category": measurement.get("category"),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.UNKNOWN),
+                    )
+                    records.append(record)
+
+            elif data_type == HealthDataType.SPO2:
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.SPO2,
+                        timestamp=measurement["timestamp"],
+                        value=float(measurement["value"]),
+                        unit="%",
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "measurement_id": measurement.get("measurement_id"),
+                            "category": measurement.get("category"),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.UNKNOWN),
+                    )
+                    records.append(record)
+
+            elif data_type == HealthDataType.SLEEP:
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.SLEEP,
+                        timestamp=measurement["timestamp"],
+                        value={
+                            "duration": measurement.get("duration"),
+                            "deep_sleep_duration": measurement.get("deep_sleep_duration"),
+                            "light_sleep_duration": measurement.get("light_sleep_duration"),
+                            "rem_sleep_duration": measurement.get("rem_sleep_duration"),
+                            "wake_up_count": measurement.get("wake_up_count"),
+                        },
+                        unit="seconds",
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "end_timestamp": (
+                                measurement["end_timestamp"].isoformat() if measurement.get("end_timestamp") else None
+                            ),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.DEVICE),
+                    )
+                    records.append(record)
 
         except APIError as e:
             self.logger.error(f"API error fetching {data_type} from Withings: {e}")
@@ -270,19 +377,20 @@ class FitbitHealthDataManager(BaseHealthDataManager):
 
     def _fetch_data_type(
         self,
-        client,  # Real FitbitAPIClient for Phase 2
+        client,  # UnifiedHealthDataClient
         user_id: str,
         data_type: HealthDataType,
         date_range: DateRange,
     ) -> list[HealthDataRecord]:
-        """Fetch specific data type from Fitbit"""
+        """Fetch specific data type from Fitbit using the unified client API"""
         records = []
 
         try:
+            # Use the unified client API to fetch data
+            raw_data = client.get_health_data(Provider.FITBIT, data_type, user_id, date_range)
+
             if data_type == HealthDataType.HEART_RATE:
-                # Fetch heart rate data
-                heart_rate_data = client.get_heart_rate_data(user_id, date_range.start, date_range.end)
-                for data_point in heart_rate_data:
+                for data_point in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.HEART_RATE,
@@ -299,9 +407,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                     records.append(record)
 
             elif data_type == HealthDataType.STEPS:
-                # Fetch steps data
-                steps_data = client.get_activity_data(user_id, date_range.start, date_range.end)
-                for data_point in steps_data:
+                for data_point in raw_data:
                     if data_point.get("steps", 0) > 0:
                         record = self._create_health_record(
                             user_id=user_id,
@@ -316,9 +422,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         records.append(record)
 
             elif data_type == HealthDataType.WEIGHT:
-                # Fetch weight data
-                weight_data = client.get_weight_data(user_id, date_range.start, date_range.end)
-                for data_point in weight_data:
+                for data_point in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.WEIGHT,
@@ -337,21 +441,19 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                     records.append(record)
 
             elif data_type == HealthDataType.SLEEP:
-                # Fetch sleep data
-                sleep_data = client.get_sleep_data(user_id, date_range.start, date_range.end)
-                for data_point in sleep_data:
+                for data_point in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.SLEEP,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),  # minutes asleep
-                        unit=data_point["unit"],
+                        unit=data_point.get("unit", "minutes"),
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
                             "fitbit_log_type": data_point.get("log_type"),
                             "log_id": data_point.get("log_id"),
-                            "end_time": data_point.get("end_time"),
+                            "end_time": (data_point["end_time"].isoformat() if data_point.get("end_time") else None),
                             "sleep_metrics": data_point.get("sleep_metrics", {}),
                         },
                         measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
@@ -359,42 +461,41 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                     records.append(record)
 
             elif data_type == HealthDataType.ECG:
-                # Fetch ECG data
-                ecg_data = client.get_ecg_data(user_id, date_range.start, date_range.end)
-                for data_point in ecg_data:
+                for data_point in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.ECG,
                         timestamp=data_point["timestamp"],
-                        value=float(data_point["value"]),  # average heart rate
-                        unit=data_point["unit"],
+                        value={
+                            "heart_rate": data_point.get("value"),
+                            "ecg_metrics": data_point.get("ecg_metrics", {}),
+                        },
+                        unit=data_point.get("unit", "uV"),
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
                             "ecg_metrics": data_point.get("ecg_metrics", {}),
                             "waveform_data": data_point.get("waveform_data", {}),
                         },
-                        measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
+                        measurement_source=data_point.get("measurement_source", MeasurementSource.DEVICE),
                     )
                     records.append(record)
 
             elif data_type == HealthDataType.RR_INTERVALS:
-                # Fetch HRV data (Heart Rate Variability maps to RR_INTERVALS)
-                hrv_data = client.get_hrv_data(user_id, date_range.start, date_range.end)
-                for data_point in hrv_data:
+                for data_point in raw_data:
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.RR_INTERVALS,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),  # RMSSD value
-                        unit=data_point["unit"],
+                        unit=data_point.get("unit", "ms"),
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
                             "hrv_metrics": data_point.get("hrv_metrics", {}),
                             "data_source": "hrv_intraday",
                         },
-                        measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
+                        measurement_source=data_point.get("measurement_source", MeasurementSource.DEVICE),
                     )
                     records.append(record)
 
