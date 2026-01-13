@@ -89,6 +89,8 @@ REST_FRAMEWORK = {
     "DEFAULT_CONTENT_NEGOTIATION_CLASS": "rest_framework.negotiation.DefaultContentNegotiation",
     "DEFAULT_THROTTLE_RATES": {
         "root_time": "10/minute",
+        "user": "100/minute",
+        "anon": "20/minute",
     },
 }
 
@@ -184,6 +186,8 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.auth_allowed",
     # Custom function to use current user instead of creating new one
     "base.pipeline.associate_by_token_user",
+    # Handle case where social account is already linked to different user
+    "base.pipeline.handle_existing_social_association",
     # Get or create user from the stored user ID
     "social_core.pipeline.social_auth.social_user",
     # Associate the social account with the current user
@@ -428,9 +432,6 @@ CACHES = {
         "LOCATION": CACHE_REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "CONNECTION_POOL_KWARGS": {
-                "decode_responses": True,
-            },
         },
     }
 }

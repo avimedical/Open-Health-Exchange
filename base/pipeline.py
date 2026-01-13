@@ -2,6 +2,7 @@ import logging
 
 from mozilla_django_oidc.contrib.drf import get_oidc_backend
 from social_core.exceptions import AuthForbidden
+from social_django.models import UserSocialAuth
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,64 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
         raise AuthForbidden(backend, error_msg)
 
     return None
+
+
+def handle_existing_social_association(strategy, details, backend, user=None, uid=None, *args, **kwargs):
+    """
+    Handle the case where a social account is already linked to a different user.
+    If the social account exists and belongs to a different EHR user, reassociate it
+    to the new user (unlinking from the old user).
+
+    This allows users to relink their health provider accounts if they've changed
+    EHR systems or if there was a previous incorrect association.
+    """
+    if not user or not uid:
+        return None
+
+    provider = backend.name
+
+    # Check if this social account already exists
+    try:
+        existing_social = UserSocialAuth.objects.get(provider=provider, uid=uid)
+
+        if existing_social.user != user:
+            old_user = existing_social.user
+            logger.warning(
+                f"Social account {provider}:{uid} is already linked to user {old_user.ehr_user_id}. "
+                f"Reassociating to new user {user.ehr_user_id}."
+            )
+
+            # Also update/delete the ProviderLink for the old user
+            try:
+                from base.models import ProviderLink
+
+                old_provider_link = ProviderLink.objects.filter(
+                    user=old_user,
+                    provider__provider_type=provider,
+                ).first()
+
+                if old_provider_link:
+                    logger.info(f"Removing old ProviderLink for user {old_user.ehr_user_id}")
+                    old_provider_link.delete()
+            except Exception as e:
+                logger.warning(f"Error cleaning up old ProviderLink: {e}")
+
+            # Reassociate the social auth to the new user
+            existing_social.user = user
+            existing_social.save()
+
+            logger.info(f"Successfully reassociated {provider}:{uid} from {old_user.ehr_user_id} to {user.ehr_user_id}")
+
+            # Return the existing social auth to skip creation in later pipeline steps
+            return {"social": existing_social, "is_new": False}
+        else:
+            # Same user, just return the existing association
+            logger.info(f"Social account {provider}:{uid} already linked to current user {user.ehr_user_id}")
+            return {"social": existing_social, "is_new": False}
+
+    except UserSocialAuth.DoesNotExist:
+        # No existing association, let the pipeline continue normally
+        return None
 
 
 def initialize_provider_services(strategy, details, backend, user, response, *args, **kwargs):

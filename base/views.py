@@ -1,8 +1,9 @@
 import logging
+from html import escape
 
 from django.conf import settings
 from django.core.cache import cache
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -23,6 +24,28 @@ from base.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _deeplink_redirect(url: str) -> HttpResponse:
+    """
+    Create an HTML response that redirects to a custom URL scheme (deeplink).
+    Django's HttpResponseRedirect blocks non-http(s) schemes for security,
+    so we use an HTML page with JavaScript and meta refresh fallback.
+    """
+    escaped_url = escape(url)
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url={escaped_url}">
+    <title>Redirecting...</title>
+</head>
+<body>
+    <p>Redirecting to app...</p>
+    <script>window.location.href = "{escaped_url}";</script>
+</body>
+</html>"""
+    return HttpResponse(html, content_type="text/html")
 
 
 class ProviderViewSet(viewsets.ReadOnlyModelViewSet):
@@ -380,7 +403,7 @@ class ProviderLinkSuccessView(View):
             )
 
             logger.info(f"Redirecting to mobile app success deeplink: {deeplink_url}")
-            return HttpResponseRedirect(deeplink_url)
+            return _deeplink_redirect(deeplink_url)
 
         # Otherwise, render the default success template
         return render(request, "base/provider_link_success.html", {"provider": provider})
@@ -537,7 +560,7 @@ class ProviderLinkErrorView(View):
             request.session.pop("linking_success_url", None)
             request.session.pop("linking_error_url", None)
 
-            return HttpResponseRedirect(deeplink_url)
+            return _deeplink_redirect(deeplink_url)
 
         # Keep the session data for potential retry if no deeplink
         # Don't clear it like we do in success view
