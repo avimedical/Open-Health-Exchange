@@ -587,3 +587,123 @@ class TestGlobalFunctions:
                 handler2 = get_unified_webhook_handler()
 
                 assert handler1 is handler2
+
+
+class TestHandleWebhookHTTPMethods:
+    """Tests for handle_webhook with different HTTP methods."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock Django settings."""
+        with patch("webhooks.unified_webhook_handler.settings") as mock:
+            mock.API_CLIENT_CONFIG = {}
+            yield mock
+
+    @pytest.fixture
+    def handler(self, mock_settings):
+        """Create handler instance."""
+        with patch("webhooks.unified_webhook_handler.WebhookPayloadProcessor"):
+            with patch("webhooks.unified_webhook_handler.WebhookSignatureValidator") as mock_validator_cls:
+                handler = UnifiedWebhookHandler()
+                handler.validator = mock_validator_cls.return_value
+                return handler
+
+    @pytest.fixture
+    def request_factory(self):
+        """Create Django request factory."""
+        return RequestFactory()
+
+    def test_handle_head_request_health_check(self, handler, request_factory):
+        """Test handling HEAD request returns health check response."""
+        request = request_factory.head("/webhook/withings/")
+
+        response = handler.handle_webhook(Provider.WITHINGS, request)
+
+        assert response.status_code == 200
+        assert response.content == b"OK"
+
+    def test_handle_unknown_method_returns_400(self, handler, request_factory):
+        """Test handling unknown HTTP method returns 400."""
+        request = request_factory.delete("/webhook/withings/")
+
+        response = handler.handle_webhook(Provider.WITHINGS, request)
+
+        assert response.status_code == 400
+        assert b"not allowed" in response.content
+
+    def test_handle_put_method_returns_400(self, handler, request_factory):
+        """Test handling PUT method returns 400."""
+        request = request_factory.put("/webhook/fitbit/", data="{}")
+
+        response = handler.handle_webhook(Provider.FITBIT, request)
+
+        assert response.status_code == 400
+
+    def test_handle_webhook_exception_returns_500(self, handler, request_factory):
+        """Test exception during webhook handling returns 500."""
+        request = request_factory.get("/webhook/withings/")
+
+        # Force an exception in the verification handler
+        with patch.object(handler, "_handle_verification_request", side_effect=RuntimeError("Test error")):
+            response = handler.handle_webhook(Provider.WITHINGS, request)
+
+        assert response.status_code == 500
+        assert b"Internal Server Error" in response.content
+
+
+class TestHandleNotificationEdgeCases:
+    """Tests for notification handling edge cases."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock Django settings."""
+        with patch("webhooks.unified_webhook_handler.settings") as mock:
+            mock.API_CLIENT_CONFIG = {}
+            yield mock
+
+    @pytest.fixture
+    def handler(self, mock_settings):
+        """Create handler instance."""
+        with patch("webhooks.unified_webhook_handler.WebhookPayloadProcessor"):
+            with patch("webhooks.unified_webhook_handler.WebhookSignatureValidator") as mock_validator_cls:
+                handler = UnifiedWebhookHandler()
+                handler.validator = mock_validator_cls.return_value
+                handler.validator.validate_withings_signature.return_value = True
+                handler.validator.validate_fitbit_signature.return_value = True
+                return handler
+
+    @pytest.fixture
+    def request_factory(self):
+        """Create Django request factory."""
+        return RequestFactory()
+
+    def test_notification_with_no_tasks_queued(self, handler, request_factory):
+        """Test notification that results in no tasks being queued."""
+        request = request_factory.post(
+            "/webhook/withings/",
+            data=json.dumps({"userid": 123, "appli": 4}),
+            content_type="application/json",
+        )
+
+        # Mock processor to return empty list
+        handler.processor.process_withings_webhook.return_value = []
+
+        with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime"):
+            response = handler._handle_notification_request(Provider.WITHINGS, request)
+
+        assert response.status_code == 202
+
+    def test_notification_processor_exception(self, handler, request_factory):
+        """Test notification when processor raises exception."""
+        request = request_factory.post(
+            "/webhook/withings/",
+            data=json.dumps({"userid": 123, "appli": 4}),
+            content_type="application/json",
+        )
+
+        # Mock processor to raise exception
+        handler.processor.process_withings_webhook.side_effect = ValueError("Invalid payload")
+
+        response = handler._handle_notification_request(Provider.WITHINGS, request)
+
+        assert response.status_code == 500
