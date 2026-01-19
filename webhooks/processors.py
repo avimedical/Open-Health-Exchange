@@ -31,7 +31,7 @@ def _lookup_ehr_user_id(external_user_id: str, provider: Provider) -> str | None
         return None
     except ProviderLink.MultipleObjectsReturned:
         # If multiple links exist, use the first one (shouldn't happen normally)
-        found_link = (
+        provider_link = (
             ProviderLink.objects.select_related("user")
             .filter(
                 external_user_id=external_user_id,
@@ -39,9 +39,9 @@ def _lookup_ehr_user_id(external_user_id: str, provider: Provider) -> str | None
             )
             .first()
         )
-        if found_link:
+        if provider_link:
             logger.warning(f"Multiple ProviderLinks found for {provider.value} user {external_user_id}, using first")
-            return found_link.user.ehr_user_id
+            return provider_link.user.ehr_user_id
         return None
 
 
