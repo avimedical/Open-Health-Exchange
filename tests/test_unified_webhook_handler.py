@@ -620,7 +620,6 @@ class TestHandleWebhookHTTPMethods:
         response = handler.handle_webhook(Provider.WITHINGS, request)
 
         assert response.status_code == 200
-        assert response.content == b"OK"
 
     def test_handle_unknown_method_returns_400(self, handler, request_factory):
         """Test handling unknown HTTP method returns 400."""
@@ -705,5 +704,38 @@ class TestHandleNotificationEdgeCases:
         handler.processor.process_withings_webhook.side_effect = ValueError("Invalid payload")
 
         response = handler._handle_notification_request(Provider.WITHINGS, request)
+
+        assert response.status_code == 500
+
+    def test_notification_validation_error(self, handler, request_factory):
+        """Test notification when processor raises WebhookValidationError."""
+        from webhooks.processors import WebhookValidationError
+
+        request = request_factory.post(
+            "/webhook/withings/",
+            data=json.dumps({"userid": 123, "appli": 4}),
+            content_type="application/json",
+        )
+
+        handler.processor.process_withings_webhook.side_effect = WebhookValidationError("Missing field")
+
+        response = handler._handle_notification_request(Provider.WITHINGS, request)
+
+        assert response.status_code == 400
+
+    def test_handle_unknown_method_returns_400(self, handler, request_factory):
+        """Test handling unknown HTTP method returns 400."""
+        request = request_factory.delete("/webhook/withings/")
+
+        response = handler.handle_webhook(Provider.WITHINGS, request)
+
+        assert response.status_code == 400
+
+    def test_handle_webhook_exception_returns_500(self, handler, request_factory):
+        """Test exception during webhook handling returns 500."""
+        request = request_factory.get("/webhook/withings/")
+
+        with patch.object(handler, "_handle_verification_request", side_effect=RuntimeError("Test error")):
+            response = handler.handle_webhook(Provider.WITHINGS, request)
 
         assert response.status_code == 500

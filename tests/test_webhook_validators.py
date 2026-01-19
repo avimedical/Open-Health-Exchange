@@ -372,3 +372,69 @@ class TestTimingAttackPrevention:
 
         source = inspect.getsource(validator.validate_bearer_token)
         assert "hmac.compare_digest" in source
+
+
+class TestValidatorExceptionHandling:
+    """Tests for exception handling in validators."""
+
+    @pytest.fixture
+    def validator(self):
+        """Create validator instance."""
+        return WebhookSignatureValidator()
+
+    @pytest.fixture
+    def mock_request(self):
+        """Create a mock request."""
+        request = MagicMock()
+        request.body = b'{"test": "data"}'
+        request.META = {}
+        return request
+
+    def test_withings_validation_handles_exception(self, validator, mock_request):
+        """Test Withings validation handles unexpected exceptions."""
+        mock_request.META["HTTP_X_WITHINGS_SIGNATURE"] = "test_sig"
+
+        with patch("webhooks.validators.settings") as mock_settings:
+            mock_settings.WITHINGS_WEBHOOK_SECRET = "valid_secret"
+            with patch("webhooks.validators.hmac.new", side_effect=TypeError("Simulated error")):
+                result = validator.validate_withings_signature(mock_request)
+
+        assert result is False
+
+    def test_fitbit_validation_handles_exception(self, validator, mock_request):
+        """Test Fitbit validation handles unexpected exceptions."""
+        mock_request.META["HTTP_X_FITBIT_SIGNATURE"] = "test_sig"
+
+        with patch("webhooks.validators.settings") as mock_settings:
+            mock_settings.FITBIT_WEBHOOK_SECRET = "secret"
+            with patch("webhooks.validators.hmac.new", side_effect=ValueError("Bad value")):
+                result = validator.validate_fitbit_signature(mock_request)
+
+        assert result is False
+
+    def test_bearer_validation_handles_missing_token(self, validator, mock_request):
+        """Test Bearer validation returns True when no token configured."""
+        mock_request.META["HTTP_AUTHORIZATION"] = "Bearer test_token"
+
+        result = validator.validate_bearer_token(mock_request, expected_token=None)
+
+        # Returns True when no token configured (development mode)
+        assert result is True
+
+    def test_bearer_validation_handles_exception(self, validator, mock_request):
+        """Test Bearer validation handles exception during comparison."""
+        mock_request.META["HTTP_AUTHORIZATION"] = "Bearer test_token"
+
+        with patch("webhooks.validators.hmac.compare_digest", side_effect=RuntimeError("Error")):
+            result = validator.validate_bearer_token(mock_request, expected_token="expected")
+
+        assert result is False
+
+    def test_generic_signature_handles_exception(self, validator, mock_request):
+        """Test generic signature validation handles exceptions."""
+        mock_request.META["HTTP_X_SIGNATURE"] = "test_sig"
+
+        with patch("webhooks.validators.hmac.new", side_effect=ValueError("Error")):
+            result = validator.validate_generic_signature(mock_request, "secret", "HTTP_X_SIGNATURE")
+
+        assert result is False
