@@ -36,7 +36,12 @@ from social_django.models import UserSocialAuth
 
 from metrics.collectors import metrics
 
-from .circuit_breaker import fitbit_circuit_breaker, withings_circuit_breaker
+from .circuit_breaker import (
+    fitbit_circuit_breaker,
+    get_fitbit_circuit_breaker,
+    get_withings_circuit_breaker,
+    withings_circuit_breaker,
+)
 from .health_data_constants import DateRange, HealthDataType, MeasurementSource, Provider
 
 logger = logging.getLogger(__name__)
@@ -214,6 +219,12 @@ class UnifiedHealthDataClient:
             # Try token refresh once
             try:
                 self._refresh_token(social_auth, query.provider)
+                # Reset circuit breaker after successful token refresh to allow retry
+                match query.provider:
+                    case Provider.WITHINGS:
+                        get_withings_circuit_breaker().force_close()
+                    case Provider.FITBIT:
+                        get_fitbit_circuit_breaker().force_close()
                 # Retry with new token
                 match query.provider:
                     case Provider.WITHINGS:
@@ -252,7 +263,12 @@ class UnifiedHealthDataClient:
 
         if data.get("status") != 0:
             error_msg = data.get("error", "Unknown API error")
-            if "invalid_token" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            # Withings returns various error messages for expired/invalid tokens:
+            # - "invalid_token" - standard OAuth error
+            # - "unauthorized" - generic auth failure
+            # - "Invalid Session: sessionid missing" - expired session
+            error_lower = error_msg.lower()
+            if "invalid_token" in error_lower or "unauthorized" in error_lower or "invalid session" in error_lower:
                 raise TokenExpiredError(f"Token expired: {error_msg}")
             raise APIError(f"Withings API error: {error_msg}")
 

@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from mozilla_django_oidc.contrib.drf import get_oidc_backend
 from social_core.exceptions import AuthForbidden
 from social_django.models import UserSocialAuth
@@ -262,7 +263,7 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
                 sync_user_health_data_initial(
                     user.ehr_user_id,
                     provider_name,
-                    lookback_days=30,  # Initial sync covers last 30 days
+                    lookback_days=settings.HEALTH_DATA_CONFIG["LOOKBACK_DAYS"],
                     data_types=effective_data_types,
                 )
 
