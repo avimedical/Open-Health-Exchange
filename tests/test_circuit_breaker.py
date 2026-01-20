@@ -27,6 +27,7 @@ class TestCircuitBreakerConfig:
         assert config.success_threshold == 3
         assert config.timeout == 60.0
         assert config.exceptions == (Exception,)
+        assert config.excluded_exceptions == ()
 
     def test_custom_config(self):
         """Test custom configuration values."""
@@ -265,6 +266,63 @@ class TestCircuitBreaker:
         # Actually, since TypeError is not in the exceptions tuple, it won't be caught
         # and won't increment failure_count
         assert breaker.failure_count == 0
+
+    def test_excluded_exceptions_do_not_count_as_failures(self):
+        """Test excluded exceptions pass through without counting as failures.
+
+        This is important for token expiration errors which are recoverable
+        and should not trip the circuit breaker for other users.
+        """
+
+        class TokenExpiredError(Exception):
+            """Simulates a token expiration error."""
+
+        class ServiceError(Exception):
+            """Simulates a service error."""
+
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            exceptions=(Exception,),  # Catch all exceptions
+            excluded_exceptions=(TokenExpiredError,),  # But exclude token errors
+        )
+        breaker = CircuitBreaker("token_test_breaker", config)
+
+        # TokenExpiredError should NOT count as a failure
+        for _ in range(5):
+            with pytest.raises(TokenExpiredError):
+                breaker.call(lambda: (_ for _ in ()).throw(TokenExpiredError("Token expired")))
+
+        # Circuit should still be closed - token errors don't count
+        assert breaker.state == CircuitState.CLOSED
+        assert breaker.failure_count == 0
+
+        # ServiceError SHOULD count as a failure
+        for _ in range(2):
+            with pytest.raises(ServiceError):
+                breaker.call(lambda: (_ for _ in ()).throw(ServiceError("Service unavailable")))
+
+        # Now circuit should be open
+        assert breaker.state == CircuitState.OPEN
+        assert breaker.failure_count == 2
+
+    def test_excluded_exceptions_still_propagate(self):
+        """Test excluded exceptions are still raised to caller for handling."""
+
+        class TokenExpiredError(Exception):
+            pass
+
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            exceptions=(Exception,),
+            excluded_exceptions=(TokenExpiredError,),
+        )
+        breaker = CircuitBreaker("propagation_test_breaker", config)
+
+        # The exception should still be raised
+        with pytest.raises(TokenExpiredError) as exc_info:
+            breaker.call(lambda: (_ for _ in ()).throw(TokenExpiredError("Token expired")))
+
+        assert "Token expired" in str(exc_info.value)
 
     def test_concurrent_access(self, breaker):
         """Test thread safety of circuit breaker."""
