@@ -106,6 +106,7 @@ class ProviderLink(models.Model):
     This is used for linking providers to users, whether using python-social-auth or custom authentication
     """
 
+    id: int  # Django auto-generated primary key (type hint for mypy)
     external_user_id: str = models.CharField(max_length=255)  # type: ignore[assignment]
     provider: Provider = models.ForeignKey(Provider, on_delete=models.CASCADE)  # type: ignore[assignment]
     user: EHRUser = models.ForeignKey(EHRUser, on_delete=models.CASCADE)  # type: ignore[assignment]

@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 class SyncStrategy(Protocol):
     """Protocol for health data sync strategies"""
 
+    sync_trigger: SyncTrigger
+
     def get_sync_params(
         self,
         user_id: str,

@@ -54,7 +54,6 @@ mozilla-django-oidc = "^4.0.1"
 django-oauth-toolkit = "^3.0.1"
 django-redis = "^6.0.0"
 django-stubs = {extras = ["compatible-mypy"], version = "^5.2.5"}
-withings-api = "^2.4.0"
 prometheus-client = "^0.21.0"
 ruff = "^0.14.0"
 
@@ -63,7 +62,12 @@ ruff = "^0.14.0"
 python-dotenv = "^1.0.1"
 pytest = "^8.3.0"
 pytest-django = "^4.9.0"
+pytest-cov = "^6.0"
+responses = "^0.25"
 types-requests = "^2.32.4.20250913"
+pre-commit = "^4.3.0"
+commitizen = "^4.9.1"
+freezegun = "^1.5.5"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "open_health_exchange.settings"
@@ -72,6 +76,32 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 testpaths = ["tests"]
 addopts = "-v --tb=short --strict-markers"
+
+[tool.coverage.run]
+source = ["."]
+omit = ["*/tests/*", "*/migrations/*", "manage.py", "*/settings.py", "conftest.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = true
+# Conventional Commits types (https://www.conventionalcommits.org/)
+# feat: A new feature
+# fix: A bug fix (including hotfixes)
+# docs: Documentation only changes
+# style: Changes that don't affect code meaning (formatting, etc.)
+# refactor: Code change that neither fixes a bug nor adds a feature
+# perf: Performance improvement
+# test: Adding missing tests or correcting existing tests
+# build: Changes to build system or dependencies
+# ci: Changes to CI configuration files and scripts
+# chore: Other changes that don't modify src or test files
+# revert: Reverts a previous commit
 
 [build-system]
 requires = ["setuptools>=40.8.0", "wheel"]

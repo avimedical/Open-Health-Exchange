@@ -36,7 +36,12 @@ from social_django.models import UserSocialAuth
 
 from metrics.collectors import metrics
 
-from .circuit_breaker import fitbit_circuit_breaker, withings_circuit_breaker
+from .circuit_breaker import (
+    fitbit_circuit_breaker,
+    get_fitbit_circuit_breaker,
+    get_withings_circuit_breaker,
+    withings_circuit_breaker,
+)
 from .health_data_constants import DateRange, HealthDataType, MeasurementSource, Provider
 
 logger = logging.getLogger(__name__)
@@ -214,6 +219,12 @@ class UnifiedHealthDataClient:
             # Try token refresh once
             try:
                 self._refresh_token(social_auth, query.provider)
+                # Reset circuit breaker after successful token refresh to allow retry
+                match query.provider:
+                    case Provider.WITHINGS:
+                        get_withings_circuit_breaker().force_close()
+                    case Provider.FITBIT:
+                        get_fitbit_circuit_breaker().force_close()
                 # Retry with new token
                 match query.provider:
                     case Provider.WITHINGS:
@@ -252,7 +263,12 @@ class UnifiedHealthDataClient:
 
         if data.get("status") != 0:
             error_msg = data.get("error", "Unknown API error")
-            if "invalid_token" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            # Withings returns various error messages for expired/invalid tokens:
+            # - "invalid_token" - standard OAuth error
+            # - "unauthorized" - generic auth failure
+            # - "Invalid Session: sessionid missing" - expired session
+            error_lower = error_msg.lower()
+            if "invalid_token" in error_lower or "unauthorized" in error_lower or "invalid session" in error_lower:
                 raise TokenExpiredError(f"Token expired: {error_msg}")
             raise APIError(f"Withings API error: {error_msg}")
 
@@ -727,10 +743,13 @@ class UnifiedHealthDataClient:
         """Fetch Fitbit ECG data"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
+        endpoints = self.config["ENDPOINTS"]["fitbit"]
+        base_url = endpoints["base_url"]
 
         try:
+            url = f"{base_url}/1/user/-/ecg/list.json"
             ecg_response = client.make_request(
-                "/1/user/-/ecg/list.json",
+                url,
                 params={
                     "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
                     "beforeDate": query.date_range.end.strftime("%Y-%m-%d"),
@@ -798,13 +817,16 @@ class UnifiedHealthDataClient:
         """Fetch Fitbit HRV data"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
+        endpoints = self.config["ENDPOINTS"]["fitbit"]
+        base_url = endpoints["base_url"]
 
         current_date = query.date_range.start.date()
         end_date_only = query.date_range.end.date()
 
         while current_date <= end_date_only:
             try:
-                hrv_response = client.make_request(f"/1/user/-/hrv/date/{current_date.strftime('%Y-%m-%d')}/all.json")
+                url = f"{base_url}/1/user/-/hrv/date/{current_date.strftime('%Y-%m-%d')}/all.json"
+                hrv_response = client.make_request(url)
 
                 if hrv_response and "hrv" in hrv_response:
                     for hrv_entry in hrv_response["hrv"]:

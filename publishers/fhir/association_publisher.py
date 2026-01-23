@@ -3,7 +3,7 @@ DeviceAssociation Publisher for managing FHIR DeviceAssociation resources
 """
 
 import logging
-from datetime import UTC
+from datetime import UTC, timedelta
 from typing import Any, cast
 
 from django.utils import dateparse
@@ -15,6 +15,15 @@ from transformers.fhir_transformers import DeviceAssociationTransformer
 from .client import FHIRClient
 
 logger = logging.getLogger(__name__)
+
+
+def _create_fhir_timestamp(dt=None) -> str:
+    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
+    from datetime import UTC
+
+    timestamp = dt or django_timezone.now()
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class DeviceAssociationPublisher:
@@ -148,7 +157,7 @@ class DeviceAssociationPublisher:
             # Update period end date
             if "period" not in deactivated_association:
                 deactivated_association["period"] = {}
-            deactivated_association["period"]["end"] = end_date or (django_timezone.now().isoformat() + "Z")
+            deactivated_association["period"]["end"] = end_date or _create_fhir_timestamp()
 
             # Update on FHIR server
             association_resource = cast(
@@ -325,11 +334,7 @@ class DeviceAssociationPublisher:
             }
 
             now = django_timezone.now()
-            thirty_days_ago = (
-                django_timezone.now().replace(day=now.day - 30)
-                if now.day > 30
-                else django_timezone.now().replace(month=now.month - 1)
-            )
+            thirty_days_ago = now - timedelta(days=30)
 
             for association in associations:
                 # Count by status

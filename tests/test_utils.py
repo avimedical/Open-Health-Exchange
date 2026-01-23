@@ -47,8 +47,8 @@ class TestMetrics:
 
     def __init__(self, test_name: str):
         self.test_name = test_name
-        self.start_time = None
-        self.operations = []
+        self.start_time: float | None = None
+        self.operations: list[dict[str, str]] = []
         self.logger = get_test_logger(test_name)
 
     def start(self):
@@ -81,7 +81,7 @@ class TestMetrics:
         self.logger.info(f"📊 Test Summary: {successful}/{total} operations successful")
 
 
-def run_test_with_django(test_function, test_name: str = None, log_level: int = logging.INFO):
+def run_test_with_django(test_function, test_name: str | None = None, log_level: int = logging.INFO):
     """
     Unified test runner that handles Django setup and metrics
 
@@ -151,7 +151,7 @@ class TestDataFactory:
 
 
 # Common assertions
-def assert_cache_key_format(cache_key: str, expected_prefix: str, expected_parts: int = None):
+def assert_cache_key_format(cache_key: str, expected_prefix: str, expected_parts: int | None = None):
     """Assert cache key follows expected format"""
     assert cache_key.startswith(expected_prefix), f"Cache key should start with {expected_prefix}, got: {cache_key}"
 

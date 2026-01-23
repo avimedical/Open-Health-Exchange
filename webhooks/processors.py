@@ -4,14 +4,45 @@ Handles provider-specific webhook formats and extracts sync information
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from django.utils import dateparse, timezone
 
+from base.models import ProviderLink
 from ingestors.health_data_constants import HealthDataType, Provider
 
 logger = logging.getLogger(__name__)
+
+
+def _lookup_ehr_user_id(external_user_id: str, provider: Provider) -> str | None:
+    """
+    Look up the EHR user ID from the external provider user ID.
+    Returns None if no matching ProviderLink is found.
+    """
+    try:
+        provider_link = ProviderLink.objects.select_related("user").get(
+            external_user_id=external_user_id,
+            provider__provider_type=provider.value,
+        )
+        return provider_link.user.ehr_user_id
+    except ProviderLink.DoesNotExist:
+        logger.warning(f"No ProviderLink found for {provider.value} user {external_user_id}")
+        return None
+    except ProviderLink.MultipleObjectsReturned:
+        # If multiple links exist, use the first one (shouldn't happen normally)
+        found_link = (
+            ProviderLink.objects.select_related("user")
+            .filter(
+                external_user_id=external_user_id,
+                provider__provider_type=provider.value,
+            )
+            .first()
+        )
+        if found_link:
+            logger.warning(f"Multiple ProviderLinks found for {provider.value} user {external_user_id}, using first")
+            return found_link.user.ehr_user_id
+        return None
 
 
 class WebhookValidationError(Exception):
@@ -42,11 +73,18 @@ class WebhookPayloadProcessor:
                 if field not in payload:
                     raise WebhookValidationError(f"Missing required field: {field}")
 
-            user_id = str(payload["userid"])
+            external_user_id = str(payload["userid"])
             appli = int(payload["appli"])  # Convert to int for mapping lookup
 
+            # Look up EHR user from external Withings user ID
+            ehr_user_id = _lookup_ehr_user_id(external_user_id, Provider.WITHINGS)
+            if not ehr_user_id:
+                logger.warning(
+                    f"Cannot process Withings webhook: no EHR user found for Withings user {external_user_id}"
+                )
+                return []
+
             # Use centralized provider mapping to resolve data types from appli type
-            from ingestors.health_data_constants import Provider
             from ingestors.provider_mappings import get_category_to_data_types_mapping
 
             # Get mapping of appli types to data type names
@@ -71,8 +109,8 @@ class WebhookPayloadProcessor:
             date_range = None
             if "startdate" in payload and "enddate" in payload:
                 try:
-                    start_time = datetime.fromtimestamp(int(payload["startdate"]), tz=timezone.utc)
-                    end_time = datetime.fromtimestamp(int(payload["enddate"]), tz=timezone.utc)
+                    start_time = datetime.fromtimestamp(int(payload["startdate"]), tz=UTC)
+                    end_time = datetime.fromtimestamp(int(payload["enddate"]), tz=UTC)
                     date_range = {"start": start_time.isoformat(), "end": end_time.isoformat()}
                 except (ValueError, OSError) as e:
                     logger.warning(f"Invalid date range in Withings webhook: {e}")
@@ -84,7 +122,7 @@ class WebhookPayloadProcessor:
                 date_range = {"start": start_time.isoformat(), "end": end_time.isoformat()}
 
             sync_request = {
-                "user_id": user_id,
+                "user_id": ehr_user_id,
                 "provider": Provider.WITHINGS.value,
                 "data_types": [dt.value for dt in data_types],
                 "date_range": date_range,
@@ -92,10 +130,11 @@ class WebhookPayloadProcessor:
                 "appli_type": appli,
                 "callback_url": payload.get("callbackurl"),
                 "comment": payload.get("comment"),
+                "external_user_id": external_user_id,
             }
 
             logger.info(
-                f"Processed Withings webhook for user {user_id}, appli {appli}, data types: {[dt.value for dt in data_types]}"
+                f"Processed Withings webhook for EHR user {ehr_user_id} (Withings: {external_user_id}), appli {appli}, data types: {[dt.value for dt in data_types]}"
             )
             return [sync_request]
 
@@ -132,14 +171,22 @@ class WebhookPayloadProcessor:
                         if field not in notification:
                             raise WebhookValidationError(f"Missing required field in notification: {field}")
 
-                    user_id = notification["ownerId"]
+                    external_user_id = notification["ownerId"]
                     collection_type = notification["collectionType"]
                     date_str = notification["date"]
 
                     # Handle user revocation
                     if collection_type == "userRevokedAccess":
-                        logger.info(f"Fitbit user {user_id} revoked access")
+                        logger.info(f"Fitbit user {external_user_id} revoked access")
                         # TODO: Handle user access revocation
+                        continue
+
+                    # Look up EHR user from external Fitbit user ID
+                    ehr_user_id = _lookup_ehr_user_id(external_user_id, Provider.FITBIT)
+                    if not ehr_user_id:
+                        logger.warning(
+                            f"Cannot process Fitbit webhook: no EHR user found for Fitbit user {external_user_id}"
+                        )
                         continue
 
                     # Map Fitbit collection types to our data types
@@ -159,7 +206,7 @@ class WebhookPayloadProcessor:
                     try:
                         sync_date = dateparse.parse_date(date_str)
                         if sync_date:
-                            start_time = datetime.combine(sync_date, datetime.min.time(), tzinfo=timezone.utc)
+                            start_time = datetime.combine(sync_date, datetime.min.time(), tzinfo=UTC)
                             end_time = start_time + timedelta(days=1)
                         else:
                             raise ValueError(f"Could not parse date: {date_str}")
@@ -172,7 +219,7 @@ class WebhookPayloadProcessor:
                     date_range = {"start": start_time.isoformat(), "end": end_time.isoformat()}
 
                     sync_request = {
-                        "user_id": user_id,
+                        "user_id": ehr_user_id,
                         "provider": Provider.FITBIT.value,
                         "data_types": [dt.value for dt in data_types],
                         "date_range": date_range,
@@ -180,11 +227,12 @@ class WebhookPayloadProcessor:
                         "collection_type": collection_type,
                         "subscription_id": notification.get("subscriptionId"),
                         "owner_type": notification.get("ownerType", "user"),
+                        "external_user_id": external_user_id,
                     }
 
                     sync_requests.append(sync_request)
                     logger.info(
-                        f"Processed Fitbit webhook notification for user {user_id}, collection {collection_type}, data types: {[dt.value for dt in data_types]}"
+                        f"Processed Fitbit webhook for EHR user {ehr_user_id} (Fitbit: {external_user_id}), collection {collection_type}, data types: {[dt.value for dt in data_types]}"
                     )
 
                 except Exception as e:

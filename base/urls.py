@@ -8,6 +8,7 @@ from base.views import (
     ProviderLinkSuccessView,
     ProviderViewSet,
     provider_linking_status,
+    unlink_provider,
 )
 
 # API router for ViewSets
@@ -23,4 +24,5 @@ urlpatterns = [
     path("link/error/", ProviderLinkErrorView.as_view(), name="provider-link-error"),
     path("link/<str:provider>/", InitiateProviderLinkingView.as_view(), name="initiate-provider-linking"),
     path("link/<str:provider>/status/", provider_linking_status, name="provider-linking-status"),
+    path("link/<str:provider>/unlink/", unlink_provider, name="unlink-provider"),
 ]

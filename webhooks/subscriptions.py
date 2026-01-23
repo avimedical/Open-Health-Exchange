@@ -155,25 +155,54 @@ class WebhookSubscriptionManager:
             user_id: EHR user ID
             subscription_id: Custom subscription ID (optional)
             collection_types: List of collection types to subscribe to
+
+        Note: Requires FITBIT_SUBSCRIBER_ID to be configured in settings.
+        The Subscriber ID is set in the Fitbit Developer Portal under your app's
+        Subscriptions settings. Without this, subscription creation will fail with 400.
+
+        Important Fitbit subscription requirements:
+        1. Configure Subscriber ID in Fitbit Developer Portal > App Settings > Subscriptions
+        2. Set Callback URL (your webhook endpoint) in the same settings
+        3. Fitbit will verify your endpoint before allowing subscriptions
+        4. Set FITBIT_SUBSCRIBER_ID and FITBIT_VERIFICATION_CODE in environment
         """
         try:
             # Get user's access token
             social_auth = self._get_user_social_auth(user_id, Provider.FITBIT)
             access_token = social_auth.access_token
+            fitbit_user_id = social_auth.extra_data.get("user_id", "-")
+
+            # Get subscriber ID from settings (configured in Fitbit Developer Portal)
+            subscriber_id = getattr(settings, "FITBIT_SUBSCRIBER_ID", "1")
+            if not subscriber_id:
+                logger.warning("FITBIT_SUBSCRIBER_ID not configured - subscription may fail")
+                subscriber_id = "1"
 
             # Generate subscription ID if not provided
+            # Using just user_id makes it easier to manage (one subscription per collection per user)
             if not subscription_id:
-                subscription_id = f"health_sync_{user_id}_{int(timezone.now().timestamp())}"
+                subscription_id = user_id
 
-            # Default collection types
-            collections = collection_types or ["activities", "body"]
+            # Default collection types - includes all data types we want to sync
+            collections = collection_types or ["activities", "sleep", "body"]
 
             created_subscriptions = []
             for collection_type in collections:
                 # Fitbit subscription API endpoint
-                url = f"https://api.fitbit.com/1/user/{social_auth.extra_data.get('user_id', user_id)}/{collection_type}/apiSubscriptions/{subscription_id}.json"
+                # Format: POST /1/user/[user-id]/[collection-path]/apiSubscriptions/[subscription-id].json
+                url = f"https://api.fitbit.com/1/user/{fitbit_user_id}/{collection_type}/apiSubscriptions/{subscription_id}.json"
 
-                headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+                # IMPORTANT: Must include X-Fitbit-Subscriber-Id header
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "X-Fitbit-Subscriber-Id": subscriber_id,
+                }
+
+                logger.info(
+                    f"Creating Fitbit subscription: user={user_id}, fitbit_user={fitbit_user_id}, "
+                    f"collection={collection_type}, subscriber_id={subscriber_id}"
+                )
 
                 try:
                     response = requests.post(url, headers=headers, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
@@ -187,7 +216,7 @@ class WebhookSubscriptionManager:
                             created_at=timezone.now(),
                         )
                         created_subscriptions.append(subscription)
-                        logger.info(f"Created Fitbit subscription for user {user_id}, collection {collection_type}")
+                        logger.info(f"✓ Created Fitbit subscription for user {user_id}, collection {collection_type}")
 
                     elif response.status_code == 409:  # Subscription already exists
                         logger.info(
@@ -204,8 +233,17 @@ class WebhookSubscriptionManager:
 
                     else:
                         logger.error(
-                            f"Fitbit subscription failed for collection {collection_type}: {response.status_code} - {response.text}"
+                            f"✗ Fitbit subscription failed for collection {collection_type}: "
+                            f"{response.status_code} - {response.text}"
                         )
+                        # Log troubleshooting hints for common errors
+                        if response.status_code == 400:
+                            logger.error(
+                                "Fitbit 400 error troubleshooting:\n"
+                                "1. Verify FITBIT_SUBSCRIBER_ID matches Fitbit Developer Portal setting\n"
+                                "2. Ensure webhook URL is configured and verified in Fitbit Developer Portal\n"
+                                "3. Check that FITBIT_VERIFICATION_CODE matches the portal setting"
+                            )
 
                 except requests.RequestException as e:
                     logger.error(f"Failed to create Fitbit subscription for collection {collection_type}: {e}")

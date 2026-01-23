@@ -6,8 +6,10 @@ This document describes how provider webhooks are received, validated, and proce
 
 | Provider | Endpoint | View | Signature Validation | Response |
 |----------|----------|------|----------------------|----------|
-| Withings | `/api/webhooks/withings/` | `withings_webhook_handler` | HMAC (shared secret) | 200 JSON {"status": "accepted"} |
-| Fitbit   | `/api/webhooks/fitbit/`   | `fitbit_webhook_handler`   | Verification token + (Planned HMAC) | 204 No Content |
+| Withings | `/webhooks/withings/` | `withings_webhook_handler` | HMAC (shared secret) | 202 JSON {"status": "accepted"} |
+| Fitbit   | `/webhooks/fitbit/`   | `fitbit_webhook_handler`   | Verification token + HMAC | 202 JSON {"status": "accepted"} |
+
+**Note:** A legacy Fitbit endpoint `/api/ingestors/fitbit/notifications/` is also available for backward compatibility with existing Fitbit Developer Portal configurations.
 
 ## Processing Flow
 
@@ -50,6 +52,6 @@ sequenceDiagram
 4. Batch notification coalescing for burst traffic
 5. Async streaming ingestion for large payloads
 
-## Fitbit 204 Body Note
+## Fitbit Verification Note
 
-Current implementation returns HTTP 204 with an empty body for Fitbit. If Fitbit later requires a JSON acknowledgement, update the view accordingly. (Tracked in Phase 2 docs tasks.)
+Fitbit webhook verification (GET requests with `?verify=<code>`) returns HTTP 204 No Content on success. Notification POST requests return HTTP 202 Accepted with a JSON response body, consistent with the Withings handler.

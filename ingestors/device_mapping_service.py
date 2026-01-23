@@ -106,8 +106,8 @@ class DeviceMappingService:
             # Single cache operation instead of multiple individual gets
             cached_values = cache.get_many(list(cache_keys.keys()))
 
-            results = {}
-            uncached_queries = []
+            results: dict[str, str | None] = {}
+            uncached_queries: list[DeviceQuery] = []
 
             for cache_key, query in cache_keys.items():
                 if cached_value := cached_values.get(cache_key):
@@ -157,9 +157,12 @@ class DeviceMappingService:
         logger.debug(f"FHIR search: {search_params}")
         search_result = self.fhir_client.search_resource("Device", search_params)
 
-        if entries := search_result.get("entry", []):
-            if device_resource := entries[0].get("resource", {}):
-                if device_uuid := device_resource.get("id"):
+        entries = search_result.get("entry", [])
+        if entries:
+            device_resource = entries[0].get("resource", {})
+            if device_resource:
+                device_uuid = device_resource.get("id")
+                if isinstance(device_uuid, str) and device_uuid:
                     logger.debug(f"FHIR found device {device_id} -> {device_uuid}")
                     return device_uuid
 
@@ -195,7 +198,7 @@ class DeviceMappingService:
 
     def _get_identifier_system(self, provider: Provider) -> str:
         """Provider-agnostic identifier system lookup from settings"""
-        systems = self.config["IDENTIFIER_SYSTEMS"]
+        systems: dict[str, str] = self.config["IDENTIFIER_SYSTEMS"]
 
         match provider.value:
             case system_key if system_key in systems:

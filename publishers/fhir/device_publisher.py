@@ -36,7 +36,7 @@ class DevicePublisher:
             fhir_device = self.transformer.transform(device_data)
 
             # Create device directly
-            device_resource = self.fhir_client.create_resource("Device", fhir_device)
+            device_resource: dict[str, Any] = self.fhir_client.create_resource("Device", fhir_device)
 
             logger.info(
                 f"Successfully published device {device_resource['id']} for provider {device_data.provider.value}"
@@ -94,18 +94,27 @@ class DevicePublisher:
                 "identifier": f"{provider_system}|"  # Match any device from this provider
             }
 
+            logger.info(f"[find_devices] Searching FHIR - params: {params}")
             bundle = self.fhir_client.search_resource("Device", params)
+            logger.info(
+                f"[find_devices] FHIR response - total: {bundle.get('total', 'N/A')}, entries: {len(bundle.get('entry', []))}"
+            )
             devices = []
 
             if bundle.get("total", 0) > 0:
                 for entry in bundle.get("entry", []):
-                    devices.append(entry.get("resource"))
+                    resource = entry.get("resource")
+                    if resource:
+                        logger.debug(
+                            f"[find_devices] Found device: id={resource.get('id')}, manufacturer={resource.get('manufacturer')}"
+                        )
+                        devices.append(resource)
 
-            logger.info(f"Found {len(devices)} devices for provider {provider}")
+            logger.info(f"[find_devices] Found {len(devices)} devices for provider {provider}")
             return devices
 
         except Exception as e:
-            logger.error(f"Error finding devices for provider {provider}: {e}")
+            logger.error(f"[find_devices] Error finding devices for provider {provider}: {e}", exc_info=True)
             raise
 
     def deactivate_missing_devices(
@@ -178,7 +187,8 @@ class DevicePublisher:
             cached_device_id = self._get_cached_device_id(provider, provider_device_id)
             if cached_device_id:
                 try:
-                    return self.fhir_client.get_resource("Device", cached_device_id)
+                    result: dict[str, Any] = self.fhir_client.get_resource("Device", cached_device_id)
+                    return result
                 except Exception:
                     # Cache miss or device deleted - fall through to search
                     self._remove_device_from_cache(provider, provider_device_id)
@@ -186,7 +196,9 @@ class DevicePublisher:
             # Search on FHIR server
             provider_system = f"https://api.{provider.lower()}.com/device-id"
 
-            device = self.fhir_client.find_resource_by_identifier("Device", provider_system, provider_device_id)
+            device: dict[str, Any] | None = self.fhir_client.find_resource_by_identifier(
+                "Device", provider_system, provider_device_id
+            )
 
             # Cache the result if found
             if device:
@@ -207,7 +219,8 @@ class DevicePublisher:
 
         for identifier in device.get("identifier", []):
             if identifier.get("system") == provider_system:
-                return identifier.get("value")
+                value = identifier.get("value")
+                return value if isinstance(value, str) else None
 
         return None
 
@@ -289,5 +302,6 @@ class DevicePublisher:
         """Extract device type from FHIR device"""
         device_types = device.get("type", [])
         if device_types and len(device_types) > 0:
-            return device_types[0].get("text", "unknown")
+            text = device_types[0].get("text", "unknown")
+            return text if isinstance(text, str) else None
         return None

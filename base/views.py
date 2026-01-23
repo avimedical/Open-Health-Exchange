@@ -1,8 +1,9 @@
 import logging
+from html import escape
 
 from django.conf import settings
 from django.core.cache import cache
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -23,6 +24,28 @@ from base.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _deeplink_redirect(url: str) -> HttpResponse:
+    """
+    Create an HTML response that redirects to a custom URL scheme (deeplink).
+    Django's HttpResponseRedirect blocks non-http(s) schemes for security,
+    so we use an HTML page with JavaScript and meta refresh fallback.
+    """
+    escaped_url = escape(url)
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url={escaped_url}">
+    <title>Redirecting...</title>
+</head>
+<body>
+    <p>Redirecting to app...</p>
+    <script>window.location.href = "{escaped_url}";</script>
+</body>
+</html>"""
+    return HttpResponse(html, content_type="text/html")
 
 
 class ProviderViewSet(viewsets.ReadOnlyModelViewSet):
@@ -72,17 +95,68 @@ class HealthSyncViewSet(viewsets.ViewSet):
             return Response({"error": "ehr_user_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            EHRUser.objects.get(ehr_user_id=ehr_user_id)
+            user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
         except EHRUser.DoesNotExist:
             return Response({"error": f"User {ehr_user_id} not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        def get_provider_sync_status(user_obj: EHRUser, prov: str) -> dict:
+            """Extract sync status from ProviderLink.extra_data"""
+            try:
+                provider_link = ProviderLink.objects.filter(user=user_obj, provider__provider_type=prov).first()
+
+                if not provider_link or not provider_link.extra_data:
+                    return {
+                        "status": "no_recent_sync",
+                        "last_sync": None,
+                        "records_synced": None,
+                        "errors": [],
+                    }
+
+                extra = provider_link.extra_data
+
+                # Check for health data sync info
+                last_sync = extra.get("last_health_data_sync")
+                if last_sync:
+                    sync_success = extra.get("last_health_sync_success", False)
+                    records_synced = extra.get("last_health_sync_fhir_resources_created", 0)
+                    error_count = extra.get("last_health_sync_errors", 0)
+
+                    return {
+                        "status": "completed" if sync_success else "failed",
+                        "last_sync": last_sync,
+                        "records_synced": records_synced,
+                        "errors": [] if error_count == 0 else [f"{error_count} error(s) during sync"],
+                    }
+
+                # Fallback: check device sync info
+                last_device_sync = extra.get("last_device_sync")
+                if last_device_sync:
+                    return {
+                        "status": "completed",
+                        "last_sync": last_device_sync,
+                        "records_synced": extra.get("last_sync_device_count", 0),
+                        "errors": [],
+                    }
+
+                return {
+                    "status": "no_recent_sync",
+                    "last_sync": None,
+                    "records_synced": None,
+                    "errors": [],
+                }
+
+            except Exception as e:
+                logger.warning(f"Error getting sync status for {prov}: {e}")
+                return {
+                    "status": "no_recent_sync",
+                    "last_sync": None,
+                    "records_synced": None,
+                    "errors": [],
+                }
+
         if provider:
             # Get status for specific provider
-            cache_key = f"sync_status:{ehr_user_id}:{provider}"
-            sync_status = cache.get(
-                cache_key, {"status": "no_recent_sync", "last_sync": None, "records_synced": None, "errors": []}
-            )
-
+            sync_status = get_provider_sync_status(user, provider)
             status_data = {"ehr_user_id": ehr_user_id, "provider": provider, **sync_status}
         else:
             # Get status for all providers
@@ -90,11 +164,7 @@ class HealthSyncViewSet(viewsets.ViewSet):
             all_statuses = {}
 
             for prov in providers:
-                cache_key = f"sync_status:{ehr_user_id}:{prov}"
-                prov_status = cache.get(
-                    cache_key, {"status": "no_recent_sync", "last_sync": None, "records_synced": None, "errors": []}
-                )
-                all_statuses[prov] = prov_status
+                all_statuses[prov] = get_provider_sync_status(user, prov)
 
             status_data = {"ehr_user_id": ehr_user_id, "providers": all_statuses}
 
@@ -120,6 +190,127 @@ class HealthSyncViewSet(viewsets.ViewSet):
         return Response(
             {"ehr_user_id": ehr_user_id, "connected_providers": serializer.data, "total_providers": len(provider_links)}
         )
+
+    @action(detail=False, methods=["get"])
+    def devices(self, request):
+        """
+        Get devices for a user from FHIR.
+
+        OHE has system-level FHIR access, so it can fetch Device resources
+        that the patient app cannot access directly due to Patient Compartment restrictions.
+
+        Query params:
+            ehr_user_id: Required. The user's EHR ID.
+            provider: Optional. Filter by provider (withings, fitbit).
+        """
+        ehr_user_id = request.query_params.get("ehr_user_id")
+        provider = request.query_params.get("provider")
+
+        logger.info(f"[devices] Request received - ehr_user_id: {ehr_user_id}, provider: {provider}")
+
+        if not ehr_user_id:
+            return Response({"error": "ehr_user_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
+            logger.info(f"[devices] Found user: {user.username}")
+        except EHRUser.DoesNotExist:
+            logger.warning(f"[devices] User not found: {ehr_user_id}")
+            return Response({"error": f"User {ehr_user_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            from publishers.fhir.device_publisher import DevicePublisher
+
+            device_publisher = DevicePublisher()
+            patient_reference = f"Patient/{ehr_user_id}"
+
+            logger.info(f"[devices] Querying FHIR for devices - patient_reference: {patient_reference}")
+
+            if provider:
+                # Get devices for specific provider
+                logger.info(f"[devices] Fetching devices for provider: {provider}")
+                devices = device_publisher.find_devices_by_provider(provider, patient_reference)
+                logger.info(f"[devices] Found {len(devices)} devices for provider {provider}")
+            else:
+                # Get devices for all providers
+                devices = []
+                for prov in ["withings", "fitbit"]:
+                    try:
+                        logger.info(f"[devices] Fetching devices for provider: {prov}")
+                        prov_devices = device_publisher.find_devices_by_provider(prov, patient_reference)
+                        logger.info(f"[devices] Found {len(prov_devices)} devices for provider {prov}")
+                        devices.extend(prov_devices)
+                    except Exception as e:
+                        logger.warning(f"[devices] Error fetching {prov} devices: {e}")
+
+            # Transform to simplified response format
+            device_list = []
+            for device in devices:
+                device_info = {
+                    "id": device.get("id"),
+                    "manufacturer": device.get("manufacturer"),
+                    "model": device.get("name") or device.get("displayName"),
+                    "status": device.get("status"),
+                    "type": None,
+                    "last_updated": device.get("meta", {}).get("lastUpdated"),
+                }
+
+                # Extract device type
+                device_types = device.get("type", [])
+                if device_types:
+                    device_info["type"] = device_types[0].get("text")
+
+                # Extract provider from identifiers
+                for identifier in device.get("identifier", []):
+                    system = identifier.get("system", "")
+                    if "withings.com" in system:
+                        device_info["provider"] = "withings"
+                        device_info["provider_device_id"] = identifier.get("value")
+                    elif "fitbit.com" in system:
+                        device_info["provider"] = "fitbit"
+                        device_info["provider_device_id"] = identifier.get("value")
+
+                device_list.append(device_info)
+
+            # Deduplicate by provider_device_id, keeping only the latest entry for each physical device
+            logger.info(f"[devices] Before deduplication: {len(device_list)} devices")
+            deduplicated_devices: dict[str, dict] = {}
+            for device_info in device_list:
+                provider_device_id = device_info.get("provider_device_id")
+                if not provider_device_id:
+                    # Keep devices without provider_device_id (shouldn't happen, but be safe)
+                    deduplicated_devices[device_info.get("id", "")] = device_info
+                    continue
+
+                existing = deduplicated_devices.get(provider_device_id)
+                if not existing:
+                    deduplicated_devices[provider_device_id] = device_info
+                else:
+                    # Compare last_updated timestamps, keep the newer one
+                    existing_ts = existing.get("last_updated") or ""
+                    current_ts = device_info.get("last_updated") or ""
+                    if current_ts > existing_ts:
+                        deduplicated_devices[provider_device_id] = device_info
+
+            device_list = list(deduplicated_devices.values())
+            logger.info(f"[devices] After deduplication: {len(device_list)} unique devices")
+
+            logger.info(f"[devices] Returning {len(device_list)} devices for user {ehr_user_id}")
+
+            return Response(
+                {
+                    "ehr_user_id": ehr_user_id,
+                    "devices": device_list,
+                    "total_devices": len(device_list),
+                    "provider_filter": provider,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[devices] Error fetching devices for user {ehr_user_id}: {e}", exc_info=True)
+            return Response(
+                {"error": "Failed to fetch devices", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=["post"])
     def trigger_device_sync(self, request):
@@ -166,7 +357,7 @@ class HealthSyncViewSet(viewsets.ViewSet):
                     "associations_created": result.processed_associations,
                     "errors": result.errors,
                 },
-                timeout=settings.HUEY_CONFIG["DEFAULT_TIMEOUT"],
+                timeout=settings.HUEY_TASK_CONFIG["DEFAULT_TIMEOUT"],
             )
 
             response_data = {
@@ -380,7 +571,7 @@ class ProviderLinkSuccessView(View):
             )
 
             logger.info(f"Redirecting to mobile app success deeplink: {deeplink_url}")
-            return HttpResponseRedirect(deeplink_url)
+            return _deeplink_redirect(deeplink_url)
 
         # Otherwise, render the default success template
         return render(request, "base/provider_link_success.html", {"provider": provider})
@@ -487,6 +678,81 @@ def trigger_device_sync(request, provider):
         return Response({"error": f"EHR user {ehr_user_id} not found"}, status=404)
 
 
+@api_view(["POST", "DELETE"])
+@permission_classes([AllowAny])
+def unlink_provider(request, provider):
+    """
+    Unlink a health provider from a user account.
+
+    This will:
+    1. Delete the UserSocialAuth record (OAuth tokens)
+    2. Automatically delete the ProviderLink (via signal handler)
+    3. Provider webhooks will stop working for this user
+
+    Accepts POST or DELETE methods for compatibility.
+    """
+    # Get EHR user ID from request
+    ehr_user_id = request.data.get("ehr_user_id") or request.query_params.get("ehr_user_id")
+    if not ehr_user_id and request.user.is_authenticated:
+        ehr_user_id = getattr(request.user, "ehr_user_id", None)
+
+    if not ehr_user_id:
+        return Response(
+            {"error": "No EHR user ID provided", "message": "Please provide ehr_user_id parameter"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate provider
+    supported_providers = ["withings", "fitbit"]
+    if provider not in supported_providers:
+        return Response(
+            {"error": f"Unsupported provider: {provider}", "supported_providers": supported_providers},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
+    except EHRUser.DoesNotExist:
+        return Response({"error": f"EHR user {ehr_user_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Find and delete the UserSocialAuth record
+    # The signal handler will automatically delete the ProviderLink
+    from social_django.models import UserSocialAuth
+
+    try:
+        social_auth = UserSocialAuth.objects.get(user=user, provider=provider)
+        social_auth.delete()
+
+        logger.info(f"Successfully unlinked {provider} for user {ehr_user_id}")
+
+        return Response(
+            {
+                "message": f"Successfully unlinked {provider}",
+                "ehr_user_id": ehr_user_id,
+                "provider": provider,
+                "status": "unlinked",
+            }
+        )
+    except UserSocialAuth.DoesNotExist:
+        # Check if there's a ProviderLink without UserSocialAuth (edge case)
+        orphan_link = ProviderLink.objects.filter(user=user, provider__provider_type=provider).first()
+        if orphan_link:
+            orphan_link.delete()
+            logger.info(f"Deleted orphan ProviderLink for {provider} user {ehr_user_id}")
+            return Response(
+                {
+                    "message": f"Successfully unlinked {provider} (cleaned up orphan link)",
+                    "ehr_user_id": ehr_user_id,
+                    "provider": provider,
+                    "status": "unlinked",
+                }
+            )
+
+        return Response(
+            {"error": f"No {provider} connection found for user {ehr_user_id}"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+
 class ProviderLinkErrorView(View):
     """
     Error page shown when provider linking fails.
@@ -537,7 +803,7 @@ class ProviderLinkErrorView(View):
             request.session.pop("linking_success_url", None)
             request.session.pop("linking_error_url", None)
 
-            return HttpResponseRedirect(deeplink_url)
+            return _deeplink_redirect(deeplink_url)
 
         # Keep the session data for potential retry if no deeplink
         # Don't clear it like we do in success view

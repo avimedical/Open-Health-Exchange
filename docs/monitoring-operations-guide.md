@@ -232,6 +232,23 @@ Operational guidance:
 - If a provider recovers early, you may manually force-close to resume traffic sooner.
 - Persistent half-open oscillation usually indicates intermittent upstream instability.
 
+### Token Refresh and Circuit Breaker Integration
+
+When an OAuth token expires, the circuit breaker automatically resets after a successful token refresh. This prevents token expiration from permanently tripping the circuit breaker.
+
+**Flow:**
+1. API call fails with expired token → circuit breaker records failure
+2. `TokenExpiredError` detected → token refresh triggered
+3. Token refresh succeeds → **circuit breaker automatically reset**
+4. Retry proceeds with fresh token
+
+**Withings-specific error patterns recognized as token expiration:**
+- `"invalid_token"` - standard OAuth error
+- `"unauthorized"` - generic auth failure
+- `"Invalid Session: sessionid missing"` - Withings expired session error
+
+This ensures that normal token lifecycle (tokens expire after ~1 hour) doesn't cause prolonged circuit breaker openings.
+
 ### Circuit Breaker Metrics
 
 Current metrics piggyback on existing error counters (e.g. `ohe_provider_api_errors_total{error_type="circuit_breaker"}`). A dedicated gauge per breaker is a planned enhancement (e.g. `ohe_circuit_breaker_state{breaker="withings_api",state="open"} 1`).
@@ -260,7 +277,8 @@ The system automatically classifies errors into categories:
 | Error Type | Examples | Retryable | Action |
 |------------|----------|-----------|---------|
 | `api_error` | 500, Internal Server Error | Yes | Retry with backoff |
-| `auth_error` | 401, Token expired | No | Refresh token or re-auth |
+| `auth_error` | 401, Token expired | Yes | Auto-refresh token, reset circuit breaker, retry |
+| `token_expired` | "Invalid Session", "invalid_token" | Yes | Auto-refresh token, reset circuit breaker, retry |
 | `rate_limit_error` | 429, Too Many Requests | Yes | Wait and retry |
 | `network_error` | Timeout, Connection refused | Yes | Retry with backoff |
 | `validation_error` | 400, Invalid parameters | No | Fix request parameters |

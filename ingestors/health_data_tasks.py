@@ -81,6 +81,13 @@ def sync_user_health_data_realtime(
             user_id=user_id, provider=provider, data_types=data_type_enums, sync_strategy=sync_strategy
         )
 
+        # Update provider link with sync information
+        try:
+            user = EHRUser.objects.get(ehr_user_id=user_id)
+            _update_provider_link_health_sync_info(user, provider, result)
+        except Exception as e:
+            logger.warning(f"Could not update provider link: {e}")
+
         # Convert result to dictionary
         result_dict = {
             "user_id": result.user_id,

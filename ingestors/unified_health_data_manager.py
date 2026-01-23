@@ -174,7 +174,7 @@ class UnifiedHealthDataManager:
 
         # Get config values and convert string names to enum values
         config_types = provider_config.get(provider.value, [])
-        if isinstance(config_types[0] if config_types else None, str):
+        if config_types and isinstance(config_types[0], str):
             # Convert string names to HealthDataType enums
             enum_types = []
             for type_str in config_types:

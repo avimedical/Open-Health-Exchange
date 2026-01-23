@@ -204,7 +204,7 @@ class HealthDataSyncService:
         """Publish FHIR observations to server"""
         try:
             # Get batch size from sync params
-            batch_size = sync_params.get("batch_size", settings.BATCH_SIZES["PUBLISHER"])
+            batch_size = sync_params.get("batch_size", settings.HEALTH_DATA_CONFIG["BATCH_SIZES"]["PUBLISHER"])
 
             # Publish observations
             publish_result = self.fhir_publisher.publish_health_observations(
@@ -265,8 +265,8 @@ class MockHealthDataSyncService(HealthDataSyncService):
     def __init__(self):
         # Use real FHIR publisher for testing, but mock data fetching
         super().__init__(fhir_publisher=None)  # Will use default HealthDataPublisher
-        self.published_observations = []
-        self.mock_records = []
+        self.published_observations: list[dict[str, Any]] = []
+        self.mock_records: list[HealthDataRecord] = []
 
     def _fetch_health_data(
         self, user_id: str, provider: Provider, data_types: list[HealthDataType], sync_params: dict[str, Any]

@@ -21,7 +21,7 @@ class WithingsOAuth2(BaseOAuth2):
     SCOPE_SEPARATOR = ","
     REDIRECT_STATE = False
     STATE_PARAMETER = True
-    DEFAULT_SCOPE = ["user.info", "user.metrics", "user.activity"]
+    DEFAULT_SCOPE = ["user.info", "user.metrics", "user.activity", "user.sleepevents"]
     ID_KEY = "userid"
     EXTRA_DATA = [
         ("access_token", "access_token"),

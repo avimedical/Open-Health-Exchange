@@ -2,6 +2,7 @@
 Unit tests for FHIR transformers
 """
 
+import uuid
 from datetime import datetime
 from unittest.mock import patch
 
@@ -16,6 +17,15 @@ from transformers.fhir_transformers import (
     transform_device,
     transform_device_association,
 )
+
+
+def is_valid_uuid(value: str) -> bool:
+    """Check if a string is a valid UUID."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 @pytest.fixture
@@ -55,7 +65,7 @@ class TestDeviceTransformer:
 
         # Basic structure
         assert result["resourceType"] == "Device"
-        assert result["id"] == "test-123"  # Uses provider_device_id directly
+        assert is_valid_uuid(result["id"])  # Uses deterministic UUID
         assert result["status"] == "active"
         assert result["manufacturer"] == "Withings"
 
@@ -132,13 +142,13 @@ class TestDeviceTransformer:
         """Test device note creation"""
         from datetime import UTC
 
-        with patch("transformers.fhir_transformers.timezone") as mock_tz:
+        with patch("transformers.base_fhir_transformer.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
 
             result = device_transformer.transform(sample_device)
 
             note = result["note"][0]
-            assert note["time"] == "2023-01-01T12:00:00+00:00Z"
+            assert note["time"] == "2023-01-01T12:00:00.000Z"
             assert "Withings" in note["text"]
 
     def test_transform_minimal_device(self, device_transformer):
@@ -155,7 +165,7 @@ class TestDeviceTransformer:
 
         # Should still have basic fields
         assert result["resourceType"] == "Device"
-        assert result["id"] == "minimal-123"  # Uses provider_device_id directly
+        assert is_valid_uuid(result["id"])  # Uses deterministic UUID
         assert result["manufacturer"] == "Fitbit"
 
         # Should not have optional fields
@@ -187,7 +197,7 @@ class TestDeviceAssociationTransformer:
         result = association_transformer.transform(sample_device, patient_ref, device_ref)
 
         assert result["resourceType"] == "DeviceAssociation"
-        assert result["id"] == "test-123-test-patient-123"  # Format: {device_id}-{patient_id}
+        assert is_valid_uuid(result["id"])  # Uses deterministic UUID
         assert result["device"]["reference"] == device_ref
         assert result["subject"]["reference"] == patient_ref
 
@@ -247,7 +257,7 @@ class TestDeviceAssociationTransformer:
 
             # Period
             period = operation["period"]
-            assert period["start"] == "2023-01-01T12:00:00+00:00Z"
+            assert period["start"] == "2023-01-01T12:00:00.000Z"
 
     def test_transform_period(self, association_transformer, sample_device):
         """Test association period"""
@@ -259,7 +269,7 @@ class TestDeviceAssociationTransformer:
             result = association_transformer.transform(sample_device, "Patient/123", "Device/456")
 
             period = result["period"]
-            assert period["start"] == "2023-01-01T12:00:00+00:00Z"
+            assert period["start"] == "2023-01-01T12:00:00.000Z"
 
     def test_transform_operator(self, association_transformer, sample_device):
         """Test operator reference"""
@@ -279,7 +289,7 @@ class TestConvenienceFunctions:
         result = transform_device(sample_device)
 
         assert result["resourceType"] == "Device"
-        assert result["id"] == "test-123"  # Uses provider_device_id directly
+        assert is_valid_uuid(result["id"])  # Uses deterministic UUID
 
     def test_transform_device_association_function(self, sample_device):
         """Test standalone transform_device_association function"""

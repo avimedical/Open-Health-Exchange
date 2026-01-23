@@ -104,8 +104,9 @@ GET /api/base/providers/capabilities/
 {
   "supported_providers": ["withings", "fitbit"],
   "supported_data_types": [
-    "heart_rate", "steps", "rr_intervals",
-    "ecg", "blood_pressure", "weight"
+    "heart_rate", "steps", "rr_intervals", "hrv",
+    "ecg", "blood_pressure", "weight", "temperature",
+    "spo2", "sleep", "pulse_wave_velocity", "fat_mass", "glucose"
   ],
   "webhook_endpoints": {
     "withings": "/webhooks/withings/",

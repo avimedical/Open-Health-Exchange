@@ -1,7 +1,9 @@
 import logging
 
+from django.conf import settings
 from mozilla_django_oidc.contrib.drf import get_oidc_backend
 from social_core.exceptions import AuthForbidden
+from social_django.models import UserSocialAuth
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,121 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
     return None
 
 
+def handle_existing_social_association(strategy, details, backend, user=None, uid=None, *args, **kwargs):
+    """
+    Handle the case where a social account is already linked to a different user.
+    If the social account exists and belongs to a different EHR user, reassociate it
+    to the new user (unlinking from the old user).
+
+    This allows users to relink their health provider accounts if they've changed
+    EHR systems or if there was a previous incorrect association.
+    """
+    if not user or not uid:
+        return None
+
+    provider = backend.name
+
+    # Check if this social account already exists
+    try:
+        existing_social = UserSocialAuth.objects.get(provider=provider, uid=uid)
+
+        if existing_social.user != user:
+            old_user = existing_social.user
+            logger.warning(
+                f"Social account {provider}:{uid} is already linked to user {old_user.ehr_user_id}. "
+                f"Reassociating to new user {user.ehr_user_id}."
+            )
+
+            # Also update/delete the ProviderLink for the old user
+            try:
+                from base.models import ProviderLink
+
+                old_provider_link = ProviderLink.objects.filter(
+                    user=old_user,
+                    provider__provider_type=provider,
+                ).first()
+
+                if old_provider_link:
+                    logger.info(f"Removing old ProviderLink for user {old_user.ehr_user_id}")
+                    old_provider_link.delete()
+            except Exception as e:
+                logger.warning(f"Error cleaning up old ProviderLink: {e}")
+
+            # Reassociate the social auth to the new user
+            existing_social.user = user
+            existing_social.save()
+
+            logger.info(f"Successfully reassociated {provider}:{uid} from {old_user.ehr_user_id} to {user.ehr_user_id}")
+
+            # Return the existing social auth to skip creation in later pipeline steps
+            return {"social": existing_social, "is_new": False}
+        else:
+            # Same user, just return the existing association
+            logger.info(f"Social account {provider}:{uid} already linked to current user {user.ehr_user_id}")
+            return {"social": existing_social, "is_new": False}
+
+    except UserSocialAuth.DoesNotExist:
+        # No existing association, let the pipeline continue normally
+        return None
+
+
+def create_provider_link(strategy, details, backend, user, uid, response, *args, **kwargs):
+    """
+    Create or update the ProviderLink after successful OAuth authentication.
+    This links the external provider user ID (e.g., Withings userid) to the EHR user,
+    enabling webhook processing to find the correct user.
+    """
+    if not user or not uid:
+        logger.warning("Cannot create ProviderLink: missing user or uid")
+        return None
+
+    provider_name = backend.name
+    external_user_id = str(uid)
+
+    try:
+        from base.models import Provider, ProviderLink
+
+        # Get or create the Provider model instance
+        provider_db, created = Provider.objects.get_or_create(
+            provider_type=provider_name,
+            defaults={
+                "name": provider_name.title(),
+                "active": True,
+            },
+        )
+        if created:
+            logger.info(f"Created new Provider: {provider_name}")
+
+        # Create or update the ProviderLink
+        provider_link, link_created = ProviderLink.objects.update_or_create(
+            provider=provider_db,
+            user=user,
+            defaults={
+                "external_user_id": external_user_id,
+                "extra_data": {
+                    "linked_via": "oauth_pipeline",
+                    "response_keys": list(response.keys()) if response else [],
+                },
+            },
+        )
+
+        if link_created:
+            logger.info(
+                f"Created ProviderLink: {provider_name} external_user_id={external_user_id} -> EHR user {user.ehr_user_id}"
+            )
+        else:
+            logger.info(
+                f"Updated ProviderLink: {provider_name} external_user_id={external_user_id} -> EHR user {user.ehr_user_id}"
+            )
+
+        return {"provider_link": provider_link}
+
+    except Exception as e:
+        logger.error(f"Error creating ProviderLink for {provider_name}: {e}")
+        # Don't fail the OAuth flow if ProviderLink creation fails
+        return None
+
+
 def initialize_provider_services(strategy, details, backend, user, response, *args, **kwargs):
     """
     Initialize provider services after successful OAuth linking.
@@ -146,7 +263,7 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
                 sync_user_health_data_initial(
                     user.ehr_user_id,
                     provider_name,
-                    lookback_days=30,  # Initial sync covers last 30 days
+                    lookback_days=settings.HEALTH_DATA_CONFIG["LOOKBACK_DAYS"],
                     data_types=effective_data_types,
                 )
 

@@ -12,6 +12,15 @@ from django.utils import timezone
 from .constants import Provider
 
 
+def _create_fhir_timestamp(dt=None) -> str:
+    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
+    from datetime import UTC
+
+    timestamp = dt or timezone.now()
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
 class HealthDataType(StrEnum):
     """Types of health data we can sync"""
 
@@ -27,6 +36,7 @@ class HealthDataType(StrEnum):
     SLEEP = "sleep"
     PULSE_WAVE_VELOCITY = "pulse_wave_velocity"
     FAT_MASS = "fat_mass"
+    GLUCOSE = "glucose"
 
 
 class AggregationLevel(StrEnum):
@@ -136,7 +146,7 @@ class HealthSyncResult:
         if self.errors is None:
             self.errors = []
         if self.sync_timestamp is None:
-            self.sync_timestamp = timezone.now().isoformat() + "Z"
+            self.sync_timestamp = _create_fhir_timestamp()
 
 
 # LOINC codes for health data types
@@ -152,6 +162,7 @@ HEALTH_DATA_LOINC_CODES = {
     HealthDataType.SLEEP: "93832-4",  # Sleep study
     HealthDataType.PULSE_WAVE_VELOCITY: "8494-7",  # Pulse wave velocity
     HealthDataType.FAT_MASS: "73708-0",  # Fat mass by DEXA
+    HealthDataType.GLUCOSE: "2339-0",  # Glucose [Mass/volume] in Blood
 }
 
 # UCUM units for health data types (aligned with mobile app BaseUnit)
@@ -203,6 +214,7 @@ HEALTH_DATA_DISPLAY_NAMES = {
     HealthDataType.SLEEP: "Sleep data",
     HealthDataType.PULSE_WAVE_VELOCITY: "Pulse wave velocity",
     HealthDataType.FAT_MASS: "Fat mass",
+    HealthDataType.GLUCOSE: "Blood glucose",
 }
 
 # FHIR observation categories
@@ -219,4 +231,52 @@ HEALTH_DATA_FHIR_CATEGORIES = {
     HealthDataType.SLEEP: "activity",
     HealthDataType.PULSE_WAVE_VELOCITY: "vital-signs",
     HealthDataType.FAT_MASS: "vital-signs",
+    HealthDataType.GLUCOSE: "laboratory",
 }
+
+# =====================================================
+# Backwards Compatibility Constants (inwithings support)
+# =====================================================
+
+# Legacy LOINC codes used by inwithings
+# Note: Steps uses 41950-7 in inwithings vs 55423-8 in Open-Health-Exchange
+HEALTH_DATA_LOINC_CODES_LEGACY = {
+    HealthDataType.STEPS: "41950-7",  # Number of steps in 24 hour Measured
+    # Other codes remain the same as HEALTH_DATA_LOINC_CODES
+}
+
+# Observation linking rules for hasMember/derivedFrom relationships
+# Used when ENABLE_OBSERVATION_LINKING is enabled in FHIR_COMPATIBILITY_CONFIG
+OBSERVATION_LINKING_RULES: dict[HealthDataType, dict[str, Any]] = {
+    # ECG emits related HR observation when ECG_EMIT_SEPARATE_HR is enabled
+    HealthDataType.ECG: {
+        "emits_related": [HealthDataType.HEART_RATE],
+        "link_type": "derivedFrom",  # HR derivedFrom ECG
+        "description": "Heart rate derived from ECG measurement",
+    },
+    # Blood pressure has component observations
+    HealthDataType.BLOOD_PRESSURE: {
+        "has_members": ["8480-6", "8462-4"],  # Systolic (8480-6), Diastolic (8462-4)
+        "link_type": "hasMember",
+        "description": "Blood pressure panel with systolic and diastolic components",
+    },
+    # HRV derived from RR intervals
+    HealthDataType.HRV: {
+        "derived_from": [HealthDataType.RR_INTERVALS],
+        "link_type": "derivedFrom",
+        "description": "HRV calculated from RR interval measurements",
+    },
+}
+
+# Blood pressure component LOINC codes
+BLOOD_PRESSURE_COMPONENT_CODES = {
+    "panel": "85354-9",  # Blood pressure panel with all children optional
+    "systolic": "8480-6",  # Systolic blood pressure
+    "diastolic": "8462-4",  # Diastolic blood pressure
+}
+
+# Heart rate LOINC code (used for ECG-related HR observations)
+HEART_RATE_LOINC = "8867-4"
+
+# ECG LOINC code
+ECG_LOINC = "8601-7"

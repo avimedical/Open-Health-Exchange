@@ -32,6 +32,7 @@ class CircuitBreakerConfig:
     success_threshold: int = 3  # Number of successes to close from half-open
     timeout: float = 60.0  # Seconds before trying half-open
     exceptions: tuple = (Exception,)  # Exceptions that trigger circuit breaker
+    excluded_exceptions: tuple = ()  # Exceptions that pass through without counting as failures
 
 
 class CircuitBreakerError(Exception):
@@ -75,6 +76,11 @@ class CircuitBreaker:
             result = func(*args, **kwargs)
             self._on_success()
             return result
+
+        except self.config.excluded_exceptions:
+            # Excluded exceptions (e.g., TokenExpiredError) pass through without counting as failures
+            # These are recoverable errors that shouldn't trip the circuit breaker
+            raise
 
         except self.config.exceptions as e:
             self._on_failure()
@@ -172,22 +178,30 @@ registry = CircuitBreakerRegistry()
 # Predefined circuit breakers for common services
 def get_withings_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Withings API."""
+    # Late import to avoid circular dependency
+    from .api_clients import TokenExpiredError
+
     config = CircuitBreakerConfig(
         failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
-        success_threshold=2,  # Default success threshold
+        success_threshold=settings.CIRCUIT_BREAKER_CONFIG["SUCCESS_THRESHOLD"],
         timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
         exceptions=(Exception,),
+        excluded_exceptions=(TokenExpiredError,),  # Token errors don't count as service failures
     )
     return registry.get_breaker("withings_api", config)
 
 
 def get_fitbit_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Fitbit API."""
+    # Late import to avoid circular dependency
+    from .api_clients import TokenExpiredError
+
     config = CircuitBreakerConfig(
         failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FAILURE_THRESHOLD"],
-        success_threshold=2,  # Default success threshold
+        success_threshold=settings.CIRCUIT_BREAKER_CONFIG["SUCCESS_THRESHOLD"],
         timeout=settings.CIRCUIT_BREAKER_CONFIG["PROVIDER_TIMEOUT"],
         exceptions=(Exception,),
+        excluded_exceptions=(TokenExpiredError,),  # Token errors don't count as service failures
     )
     return registry.get_breaker("fitbit_api", config)
 

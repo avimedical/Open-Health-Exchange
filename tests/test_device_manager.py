@@ -2,7 +2,6 @@
 Unit tests for the modern device manager
 """
 
-from dataclasses import dataclass
 from unittest.mock import Mock, patch
 
 import pytest
@@ -16,15 +15,17 @@ from ingestors.device_manager import (
 )
 
 
-@dataclass
-class MockWithingsDevice:
-    """Mock Withings device for testing"""
-
-    deviceid: int
-    type: str
-    model: str
-    battery: str
-    timezone: str = "UTC"
+def create_mock_withings_device(
+    deviceid: int, device_type: str, model: str, battery: str, timezone: str = "UTC"
+) -> dict:
+    """Create a mock Withings device dict for testing (matches API response format)"""
+    return {
+        "deviceid": deviceid,
+        "type": device_type,
+        "model": model,
+        "battery": battery,
+        "timezone": timezone,
+    }
 
 
 @pytest.fixture
@@ -92,21 +93,21 @@ class TestDeviceManager:
         with pytest.raises(AuthenticationError, match="Missing credential field"):
             device_manager._get_user_credentials("test_user")
 
-    @patch("ingestors.device_manager.WithingsApiAdapter")
-    @patch.object(DeviceManager, "_create_api_client")  # Mock the entire client creation to avoid import error
+    @patch.object(DeviceManager, "_create_api_client")
     @patch.object(DeviceManager, "_get_user_credentials")
-    def test_fetch_user_devices_success(self, mock_get_creds, mock_create_client, mock_adapter, device_manager):
+    def test_fetch_user_devices_success(self, mock_get_creds, mock_create_client, device_manager):
         """Test successful device fetching"""
         # Setup mocks
         mock_get_creds.return_value = OAuthCredentials("token")
 
-        # Mock the API client directly to avoid withings_api import issues
+        # Mock the API client
         mock_client = Mock()
         mock_create_client.return_value = mock_client
 
+        # Now using dict format (matches DirectWithingsClient response)
         mock_devices = [
-            MockWithingsDevice(123, "Scale", "Body+", "high"),
-            MockWithingsDevice(456, "Blood Pressure Monitor", "BPM Core", "low"),
+            create_mock_withings_device(123, device_type="Scale", model="Body+", battery="high"),
+            create_mock_withings_device(456, device_type="Blood Pressure Monitor", model="BPM Core", battery="low"),
         ]
         mock_client.fetch_devices.return_value = mock_devices
 
@@ -133,7 +134,7 @@ class TestDeviceManager:
 
     def test_transform_withings_device(self, device_manager):
         """Test Withings device data transformation"""
-        mock_device = MockWithingsDevice(deviceid=123, type="Scale", model="Body+", battery="medium")
+        mock_device = create_mock_withings_device(123, device_type="Scale", model="Body+", battery="medium")
 
         device_data = device_manager._transform_withings_device(mock_device)
 

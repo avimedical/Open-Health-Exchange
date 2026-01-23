@@ -19,8 +19,18 @@ from ingestors.health_data_constants import (
 
 from .base_fhir_transformer import BaseFHIRTransformer
 from .ecg_transformers import ECGTransformer
+from .identifier_utils import generate_resource_uuid
 
 logger = logging.getLogger(__name__)
+
+
+def _create_fhir_timestamp(dt=None) -> str:
+    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
+    from datetime import UTC
+
+    timestamp = dt or timezone.now()
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class HealthDataTransformer(BaseFHIRTransformer):
@@ -55,17 +65,29 @@ class HealthDataTransformer(BaseFHIRTransformer):
             )
 
         # Get FHIR codes and mappings for non-ECG data
-        loinc_code = HEALTH_DATA_LOINC_CODES.get(record.data_type)
+        # Use LOINC override if available (e.g., steps: 41950-7 for inwithings compatibility)
+        # Convert HealthDataType keys to strings for compatibility with get_loinc_code
+        loinc_codes_str: dict[str, str] = {k.value: v for k, v in HEALTH_DATA_LOINC_CODES.items()}
+        loinc_code = self.get_loinc_code(record.data_type.value, loinc_codes_str)
+        if not loinc_code:
+            loinc_code = HEALTH_DATA_LOINC_CODES.get(record.data_type)
         display_name = HEALTH_DATA_DISPLAY_NAMES.get(record.data_type)
         category = HEALTH_DATA_FHIR_CATEGORIES.get(record.data_type, "survey")
 
         if not loinc_code:
             raise ValueError(f"No LOINC code defined for data type: {record.data_type}")
 
-        # Create base observation
-        observation = {
+        # Extract patient ID from reference for identifier and UUID generation
+        patient_id = patient_reference.split("/")[-1] if "/" in patient_reference else patient_reference
+
+        # Generate deterministic UUID for Observation resource ID
+        resource_id = generate_resource_uuid("Observation", f"{patient_id}:{record.timestamp.isoformat()}:{loinc_code}")
+
+        # Create base observation with compatibility support
+        observation: dict[str, Any] = {
             "resourceType": "Observation",
-            "status": "final",
+            "id": resource_id,
+            "status": self.get_observation_status(),  # "registered" in legacy mode, "final" in modern
             "category": [
                 {
                     "coding": [
@@ -82,7 +104,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 "text": display_name,
             },
             "subject": {"reference": patient_reference},
-            "effectiveDateTime": record.timestamp.isoformat() + "Z",
+            "effectiveDateTime": self.create_fhir_timestamp(record.timestamp),
             "meta": {
                 "source": f"#{record.provider.value}",
                 "tag": [
@@ -101,18 +123,32 @@ class HealthDataTransformer(BaseFHIRTransformer):
             },
         }
 
-        # Add device reference if available
-        if device_reference:
+        # Add issued field in legacy mode (inwithings includes sync timestamp)
+        if self.should_include_issued_field():
+            observation["issued"] = self.create_fhir_timestamp()
+
+        # Add device info based on compatibility mode
+        if self.should_use_device_extensions():
+            # Legacy mode: device info as extensions
+            device_id = record.device_id
+            device_model = record.metadata.get("device_model") if record.metadata else None
+            extensions = self.create_device_extensions(record.provider.value, device_id, device_model)
+            if extensions:
+                observation["extension"] = extensions
+        elif device_reference:
+            # Modern mode: device reference
             observation["device"] = {"reference": device_reference}
 
-        # Add provider-specific identifier
-        observation["identifier"] = [
-            {
-                "use": "secondary",
-                "system": f"https://api.{record.provider.value}.com/health-data",
-                "value": f"{record.data_type.value}_{record.timestamp.isoformat()}_{record.user_id}",
-            }
-        ]
+        # Add provider-specific identifier using compatibility strategy
+        # For blood pressure, include both LOINC codes in identifier for uniqueness
+        secondary_loinc = "8462-4" if record.data_type == HealthDataType.BLOOD_PRESSURE else None
+        observation["identifier"] = self.create_observation_identifier(
+            provider=record.provider,
+            patient_id=patient_id,
+            timestamp=record.timestamp,
+            loinc_code=loinc_code,
+            secondary_loinc_code=secondary_loinc,
+        )
 
         # Transform value based on data type
         if record.data_type == HealthDataType.HEART_RATE:
@@ -143,7 +179,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
         if record.metadata:
             observation["note"] = [
                 {
-                    "time": timezone.now().isoformat() + "Z",
+                    "time": self.create_fhir_timestamp(),
                     "text": f"Synced from {record.provider.value.title()} Health Platform. Metadata: {record.metadata}",
                 }
             ]
@@ -443,7 +479,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
         """Transform generic numeric value to FHIR format"""
         ucum_unit = HEALTH_DATA_UCUM_UNITS.get(record.unit, record.unit)
 
-        if isinstance(record.value, (int, float)):
+        if isinstance(record.value, int | float):
             return {
                 "valueQuantity": {
                     "value": float(record.value),
@@ -477,27 +513,60 @@ class HealthDataBundle:
     """Creates FHIR Bundles for health data resources"""
 
     @staticmethod
+    def get_compatibility_config() -> dict[str, Any]:
+        """Get FHIR compatibility configuration."""
+        from django.conf import settings
+
+        return getattr(settings, "FHIR_COMPATIBILITY_CONFIG", {})
+
+    @staticmethod
     def create_transaction_bundle(observations: list[dict[str, Any]], bundle_id: str | None = None) -> dict[str, Any]:
-        """Create a FHIR transaction bundle for health observations"""
+        """Create a FHIR bundle for health observations with compatibility support.
+
+        In legacy mode (inwithings compatible):
+        - Uses 'batch' bundle type with PUT method for idempotent updates
+        - Observations must have identifiers for PUT requests
+
+        In modern mode:
+        - Uses 'transaction' bundle type with POST method
+        """
+        config = HealthDataBundle.get_compatibility_config()
+        bundle_type = config.get("BUNDLE_TYPE", "batch")  # Default to batch for legacy
+        bundle_method = config.get("BUNDLE_METHOD", "PUT")  # Default to PUT for legacy
 
         if bundle_id is None:
             bundle_id = f"health-data-bundle-{timezone.now().strftime('%Y%m%d%H%M%S')}"
 
-        # Create bundle entries
+        # Create bundle entries based on compatibility mode
         entries = []
         for i, observation in enumerate(observations):
-            entry = {
-                "fullUrl": f"urn:uuid:observation-{i}",
-                "resource": observation,
-                "request": {"method": "POST", "url": "Observation"},
-            }
+            # Get observation ID for PUT method
+            obs_id = observation.get("id")
+            if not obs_id and observation.get("identifier"):
+                # Use identifier value as ID for PUT
+                obs_id = observation["identifier"][0].get("value", f"observation-{i}")
+
+            if bundle_method == "PUT" and obs_id:
+                # Legacy mode: PUT for idempotent updates
+                entry = {
+                    "fullUrl": f"Observation/{obs_id}",
+                    "resource": {**observation, "id": obs_id},
+                    "request": {"method": "PUT", "url": f"Observation/{obs_id}"},
+                }
+            else:
+                # Modern mode: POST for new resources
+                entry = {
+                    "fullUrl": f"urn:uuid:observation-{i}",
+                    "resource": observation,
+                    "request": {"method": "POST", "url": "Observation"},
+                }
             entries.append(entry)
 
         bundle = {
             "resourceType": "Bundle",
             "id": bundle_id,
-            "type": "transaction",
-            "timestamp": timezone.now().isoformat() + "Z",
+            "type": bundle_type,
+            "timestamp": _create_fhir_timestamp(),
             "total": len(entries),
             "entry": entries,
             "meta": {

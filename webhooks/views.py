@@ -179,11 +179,26 @@ def fitbit_webhook_handler(request):
 
     if request.method == "GET":
         # Handle webhook verification for Fitbit
+        # Fitbit sends a GET request with ?verify=<code> to verify your endpoint
+        # You must return 204 No Content if the code matches your FITBIT_VERIFICATION_CODE
+        # Return 404 if the code doesn't match
         verify = request.GET.get("verify")
         if verify:
-            logger.info("Fitbit webhook verification request received")
-            # Fitbit expects the verify parameter echoed back
-            return HttpResponse(verify, content_type="text/plain", status=204)
+            logger.info(f"Fitbit webhook verification request received with code: {verify[:8]}...")
+
+            # Get the expected verification code from settings
+            expected_code = getattr(settings, "FITBIT_VERIFICATION_CODE", "")
+
+            if expected_code and verify == expected_code:
+                logger.info("Fitbit webhook verification successful - code matches")
+                return HttpResponse(status=204)  # 204 No Content = verification successful
+            elif not expected_code:
+                # If no verification code is configured, accept any code (development mode)
+                logger.warning("FITBIT_VERIFICATION_CODE not configured - accepting verification in dev mode")
+                return HttpResponse(status=204)
+            else:
+                logger.warning("Fitbit webhook verification failed - code mismatch")
+                return HttpResponse(status=404)  # 404 = verification failed
         else:
             return HttpResponseBadRequest("Missing verify parameter")
 

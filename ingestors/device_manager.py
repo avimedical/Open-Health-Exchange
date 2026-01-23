@@ -4,7 +4,7 @@ Modern, generic device manager using Python 3.13+ features
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from django.conf import settings
 from social_django.models import UserSocialAuth
@@ -93,23 +93,11 @@ class DeviceManager:
                 raise DeviceManagerError(f"Unsupported provider: {self.provider}")
 
     def _create_withings_client(self, credentials: OAuthCredentials) -> APIClient:
-        """Create Withings API client"""
-        import time
-
-        from withings_api import Credentials2, WithingsApi
-
-        withings_credentials = Credentials2(
+        """Create Withings API client using direct HTTP calls"""
+        return DirectWithingsClient(
             access_token=credentials.access_token,
-            token_type="Bearer",
-            refresh_token=credentials.refresh_token,
-            userid=credentials.user_id,
-            client_id=getattr(settings, self.config.client_id_setting),
-            consumer_secret=getattr(settings, self.config.client_secret_setting),
-            expires_in=credentials.expires_in or 10800,
-            token_expiry=int(time.time()) + (credentials.expires_in or 10800),
+            api_base_url=self.config.api_base_url,
         )
-
-        return WithingsApiAdapter(WithingsApi(withings_credentials, refresh_cb=lambda x: None))
 
     def _create_fitbit_client(self, credentials: OAuthCredentials) -> APIClient:
         """Create Fitbit API client"""
@@ -136,21 +124,25 @@ class DeviceManager:
             case _:
                 raise DeviceManagerError(f"Unsupported provider: {self.provider}")
 
-    def _transform_withings_device(self, device) -> DeviceData:
-        """Transform Withings device data"""
-        device_type = self.config.device_types_map.get(device.type, DeviceType.UNKNOWN)
+    def _transform_withings_device(self, device: dict) -> DeviceData:
+        """Transform Withings device data from API response dict"""
+        device_type_str = device.get("type", "")
+        device_type = self.config.device_types_map.get(device_type_str, DeviceType.UNKNOWN)
 
         return DeviceData(
-            provider_device_id=str(device.deviceid),
+            provider_device_id=str(device.get("deviceid", "")),
             provider=self.provider,
             device_type=device_type,
             manufacturer="Withings",
-            model=device.model or "Unknown Model",
-            battery_level=BatteryLevel.from_text(device.battery),
+            model=device.get("model", "Unknown Model"),
+            battery_level=BatteryLevel.from_text(device.get("battery")),
             raw_data={
-                "deviceid": device.deviceid,
-                "timezone": str(device.timezone) if device.timezone else None,
-                "battery_text": device.battery,
+                "deviceid": device.get("deviceid"),
+                "timezone": device.get("timezone"),
+                "battery_text": device.get("battery"),
+                "type": device_type_str,
+                "model_id": device.get("model_id"),
+                "mac_address": device.get("mac_address"),
             },
         )
 
@@ -176,20 +168,44 @@ class DeviceManager:
         )
 
 
-class WithingsApiAdapter:
-    """Adapter for Withings API to match APIClient protocol"""
+class DirectWithingsClient:
+    """Direct Withings API client using HTTP requests (replaces withings-api library)"""
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, access_token: str, api_base_url: str):
+        self.access_token = access_token
+        self.api_base_url = api_base_url
 
-    def fetch_devices(self) -> list:
-        """Fetch devices from Withings API"""
+    def fetch_devices(self) -> list[dict]:
+        """Fetch devices from Withings API using direct HTTP call"""
+        import requests
+
+        url = f"{self.api_base_url}/v2/user"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        data = {"action": "getdevice"}
+
         try:
-            response = self.client.user_get_device()
-            devices: list = response.devices
+            response = requests.post(url, headers=headers, data=data, timeout=30)
+            response.raise_for_status()
+
+            json_response = response.json()
+
+            # Withings API returns status 0 for success
+            status = json_response.get("status", -1)
+            if status != 0:
+                error_message = json_response.get("error", f"Unknown error (status: {status})")
+                raise APIError(f"Withings API error: {error_message}")
+
+            body = json_response.get("body", {})
+            devices: list[dict] = body.get("devices", [])
             return devices
-        except Exception as e:
-            raise APIError(f"Withings API error: {e}") from e
+
+        except requests.exceptions.Timeout:
+            raise APIError("Withings API request timed out")
+        except requests.exceptions.RequestException as e:
+            if hasattr(e, "response") and e.response is not None:
+                if e.response.status_code == 401:
+                    raise AuthenticationError("Withings access token expired or invalid")
+            raise APIError(f"Withings API request failed: {e}") from e
 
 
 class FitbitApiAdapter:
@@ -198,13 +214,11 @@ class FitbitApiAdapter:
     def __init__(self, client):
         self.client = client
 
-    def fetch_devices(self) -> list[dict]:
-        """Fetch devices from Fitbit API"""
+    def fetch_devices(self) -> list[dict[str, Any]]:
+        """Fetch devices from Fitbit API using the dedicated devices endpoint"""
         try:
-            profile = self.client.user_profile_get()
-            if not profile or "user" not in profile:
-                return []
-            devices: list[dict] = profile["user"].get("devices", [])
+            # Use the dedicated devices endpoint, not user profile
+            devices: list[dict[str, Any]] = self.client.get_devices() or []
             return devices
         except Exception as e:
             if "expired" in str(e).lower() or "invalid" in str(e).lower():

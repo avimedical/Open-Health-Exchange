@@ -21,18 +21,20 @@
             "program": "${workspaceFolder}/manage.py",
             "args": [
                 "run_huey",
-                "-V", // maximum verbosity (maps to --huey-verbose)
+                "-V",
                 "--workers",
                 "1",
                 "--worker-type",
-                "process"
+                "thread",
+                "--no-periodic"
             ],
             "env": {
                 "PYTHONUNBUFFERED": "1"
             },
             "console": "integratedTerminal",
             "justMyCode": false,
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "subProcess": true
         }
     ],
     "compounds": [

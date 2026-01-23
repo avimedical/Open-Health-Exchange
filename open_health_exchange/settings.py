@@ -27,13 +27,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-zyao2#r)3jj8tdl5=a7*talwte2p2#nd!d&%xubebu2_j4v5r!"
+# SECURITY: SECRET_KEY must be set via environment variable
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required. Set it in your .env file.")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# SECURITY: DEBUG defaults to False for safety - explicitly enable in .env for development
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = [
     os.environ.get("ALLOWED_HOST", "*"),
@@ -89,6 +91,8 @@ REST_FRAMEWORK = {
     "DEFAULT_CONTENT_NEGOTIATION_CLASS": "rest_framework.negotiation.DefaultContentNegotiation",
     "DEFAULT_THROTTLE_RATES": {
         "root_time": "10/minute",
+        "user": "100/minute",
+        "anon": "20/minute",
     },
 }
 
@@ -137,8 +141,9 @@ SOCIAL_AUTH_FORCE_EMAIL_LOWERCASE = True
 SOCIAL_AUTH_FIELDS_STORED_IN_SESSION = ["key", "token"]
 SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
 
-SOCIAL_AUTH_WITHINGS_KEY = os.environ.get("WITHINGS_CLIENT_ID", "123456")
-SOCIAL_AUTH_WITHINGS_SECRET = os.environ.get("WITHINGS_CLIENT_SECRET", "123456")
+# OAuth credentials - must be set via environment variables (no hardcoded fallbacks for security)
+SOCIAL_AUTH_WITHINGS_KEY = os.environ.get("WITHINGS_CLIENT_ID")
+SOCIAL_AUTH_WITHINGS_SECRET = os.environ.get("WITHINGS_CLIENT_SECRET")
 
 SOCIAL_AUTH_FITBIT_KEY = os.environ.get("FITBIT_CLIENT_ID")
 SOCIAL_AUTH_FITBIT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
@@ -153,6 +158,13 @@ SOCIAL_AUTH_FITBIT_SCOPE = [
     "social",
     "weight",
 ]
+
+# Fitbit Subscription Configuration
+# The Subscriber ID is configured in the Fitbit Developer Portal under your app's settings
+# Go to: https://dev.fitbit.com/apps > Your App > Edit Application Settings > Subscriptions
+FITBIT_SUBSCRIBER_ID = os.environ.get("FITBIT_SUBSCRIBER_ID", "1")
+# The Verification Code is set in the Fitbit Developer Portal and must match for webhook verification
+FITBIT_VERIFICATION_CODE = os.environ.get("FITBIT_VERIFICATION_CODE", "")
 
 SOCIAL_AUTH_USER_MODEL = "base.EHRUser"  # Tell python-social-auth to use custom user model
 
@@ -184,6 +196,8 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.auth_allowed",
     # Custom function to use current user instead of creating new one
     "base.pipeline.associate_by_token_user",
+    # Handle case where social account is already linked to different user
+    "base.pipeline.handle_existing_social_association",
     # Get or create user from the stored user ID
     "social_core.pipeline.social_auth.social_user",
     # Associate the social account with the current user
@@ -191,7 +205,9 @@ SOCIAL_AUTH_PIPELINE = (
     # Get extra data from provider and store it
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
-    # Custom function to update ProviderLink model
+    # Create ProviderLink to enable webhook processing
+    "base.pipeline.create_provider_link",
+    # Initialize provider services (device sync, health sync, webhooks)
     "base.pipeline.initialize_provider_services",
 )
 
@@ -239,6 +255,7 @@ API_CLIENT_CONFIG = {
             },
         },
         "fitbit": {
+            "base_url": "https://api.fitbit.com",
             "device_types": ["tracker", "watch", "scale", "aria"],
             "source_mapping": {"Aria": "device", "AriaAir": "device", "Withings": "device", "API": "user"},
             "logtype_mapping": {"auto_detected": "device", "manual": "user"},
@@ -428,9 +445,6 @@ CACHES = {
         "LOCATION": CACHE_REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "CONNECTION_POOL_KWARGS": {
-                "decode_responses": True,
-            },
         },
     }
 }
@@ -466,6 +480,7 @@ WEBHOOK_CONFIG = {
 CIRCUIT_BREAKER_CONFIG = {
     "TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_TIMEOUT", "60.0")),  # Eliminates 3 hardcoded timeout=60.0
     "FAILURE_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
+    "SUCCESS_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", "2")),  # Externalized per PR review
     "FHIR_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
     "WEBHOOK_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
     "PROVIDER_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
@@ -537,4 +552,37 @@ OAUTH_PROVIDER_URLS = {
         "API_BASE": "https://api.fitbit.com",
         "PROFILE_URL": "https://api.fitbit.com/1/user/-/profile.json",
     },
+}
+
+# FHIR Compatibility Configuration
+# Defaults to legacy mode for backwards compatibility with inwithings clients
+FHIR_COMPATIBILITY_CONFIG = {
+    # Format mode: "legacy" (inwithings-compatible) or "modern" (FHIR R5 best practices)
+    "FORMAT_MODE": os.environ.get("FHIR_FORMAT_MODE", "legacy"),
+    # Identifier generation: "jenkins_hash" (inwithings) or "modern" (UUID-based)
+    "IDENTIFIER_STRATEGY": os.environ.get("FHIR_IDENTIFIER_STRATEGY", "jenkins_hash"),
+    # Observation status: "registered" (inwithings) or "final" (modern)
+    "OBSERVATION_STATUS": os.environ.get("FHIR_OBSERVATION_STATUS", "registered"),
+    # Include issued field with sync timestamp (inwithings behavior)
+    "INCLUDE_ISSUED_FIELD": os.environ.get("FHIR_INCLUDE_ISSUED", "true").lower() == "true",
+    # Device info mode: "extension" (inwithings) or "reference" (separate Device resources)
+    "DEVICE_INFO_MODE": os.environ.get("FHIR_DEVICE_INFO_MODE", "extension"),
+    # Include device-model extension (per PR review feedback)
+    "INCLUDE_DEVICE_MODEL_EXTENSION": os.environ.get("FHIR_INCLUDE_DEVICE_MODEL_EXT", "true").lower() == "true",
+    # Bundle type: "batch" (inwithings, idempotent) or "transaction" (modern)
+    "BUNDLE_TYPE": os.environ.get("FHIR_BUNDLE_TYPE", "batch"),
+    # Bundle method: "PUT" (inwithings, idempotent) or "POST" (modern)
+    "BUNDLE_METHOD": os.environ.get("FHIR_BUNDLE_METHOD", "PUT"),
+    # Emit separate HR observation when ECG is processed (per PR review feedback)
+    "ECG_EMIT_SEPARATE_HR": os.environ.get("FHIR_ECG_EMIT_HR", "true").lower() == "true",
+    # Enable observation linking via derivedFrom/hasMember (per PR review feedback)
+    "ENABLE_OBSERVATION_LINKING": os.environ.get("FHIR_ENABLE_OBS_LINKING", "true").lower() == "true",
+    # LOINC code overrides for backwards compatibility
+    "LOINC_OVERRIDES": {
+        "steps": os.environ.get("FHIR_LOINC_STEPS", "41950-7"),  # inwithings uses 41950-7
+    },
+    # Use coded AFib interpretation (N/DET/IND) instead of valueString
+    "ECG_AFIB_CODED_INTERPRETATION": os.environ.get("FHIR_ECG_AFIB_CODED", "true").lower() == "true",
+    # Identifier system URL template
+    "IDENTIFIER_SYSTEM_TEMPLATE": os.environ.get("FHIR_IDENTIFIER_SYSTEM", "https://api.{provider}.com/health-data"),
 }
