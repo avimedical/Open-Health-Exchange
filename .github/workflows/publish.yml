@@ -124,6 +124,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Determine environment tag prefix
+        id: env
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          if [ "$BRANCH" = "development" ]; then
+            echo "prefix=dev" >> "$GITHUB_OUTPUT"
+          elif [ "$BRANCH" = "staging" ]; then
+            echo "prefix=pre" >> "$GITHUB_OUTPUT"
+          elif [ "$BRANCH" = "main" ]; then
+            echo "prefix=rel" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -138,9 +156,7 @@ jobs:
           images: |
             ghcr.io/${{ github.repository_owner }}/open-health-exchange
           tags: |
-            type=ref,event=branch
-            type=sha
-            type=raw,value=latest
+            type=raw,value=${{ steps.env.outputs.prefix }}-${{ steps.version.outputs.version }}-${{ github.run_number }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
