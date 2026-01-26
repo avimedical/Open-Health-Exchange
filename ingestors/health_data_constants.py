@@ -245,6 +245,21 @@ HEALTH_DATA_LOINC_CODES_LEGACY = {
     # Other codes remain the same as HEALTH_DATA_LOINC_CODES
 }
 
+# Legacy UCUM codes (inwithings compatibility)
+# inwithings uses non-standard UCUM codes for some units
+HEALTH_DATA_UCUM_UNITS_LEGACY: dict[str, str] = {
+    "°C": "°C",  # inwithings uses °C as code (not standard UCUM Cel)
+    "celsius": "°C",
+    "C": "°C",
+}
+
+# Legacy display units (inwithings compatibility)
+# inwithings uses different display format for some units
+HEALTH_DATA_DISPLAY_UNITS_LEGACY: dict[str, str] = {
+    "celsius": "C",  # inwithings displays as "C" not "°C"
+    "°C": "C",
+}
+
 # Observation linking rules for hasMember/derivedFrom relationships
 # Used when ENABLE_OBSERVATION_LINKING is enabled in FHIR_COMPATIBILITY_CONFIG
 OBSERVATION_LINKING_RULES: dict[HealthDataType, dict[str, Any]] = {

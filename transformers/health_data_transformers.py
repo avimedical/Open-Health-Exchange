@@ -283,15 +283,20 @@ class HealthDataTransformer(BaseFHIRTransformer):
             return {"valueString": f"ECG measurement: {record.value}"}
 
     def _transform_temperature_value(self, record: HealthDataRecord) -> dict[str, Any]:
-        """Transform temperature value to FHIR format"""
-        ucum_unit = HEALTH_DATA_UCUM_UNITS.get(record.unit, record.unit)
+        """Transform temperature value to FHIR format.
+
+        In legacy mode (inwithings), uses non-standard UCUM:
+        - display: "C" (not "°C")
+        - code: "°C" (not "Cel")
+        """
+        display_unit, ucum_code = self.get_unit_code(record.unit)
 
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": record.unit,
+                "unit": display_unit,
                 "system": "http://unitsofmeasure.org",
-                "code": ucum_unit,
+                "code": ucum_code,
             }
         }
 

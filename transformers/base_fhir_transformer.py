@@ -314,6 +314,35 @@ class BaseFHIRTransformer(ABC):
         config = self.get_compatibility_config()
         return config.get("DEVICE_INFO_MODE") == "extension"
 
+    def get_unit_code(self, display_unit: str) -> tuple[str, str]:
+        """
+        Get (display, code) tuple for unit respecting legacy mode.
+
+        In legacy mode (inwithings), some units use non-standard UCUM codes.
+        For example, temperature uses "°C" as the code instead of "Cel".
+
+        Args:
+            display_unit: The display unit string (e.g., "°C", "celsius")
+
+        Returns:
+            Tuple of (display_unit, ucum_code)
+        """
+        config = self.get_compatibility_config()
+        if config.get("FORMAT_MODE") == "legacy":
+            from ingestors.health_data_constants import (
+                HEALTH_DATA_DISPLAY_UNITS_LEGACY,
+                HEALTH_DATA_UCUM_UNITS_LEGACY,
+            )
+
+            ucum = HEALTH_DATA_UCUM_UNITS_LEGACY.get(display_unit)
+            display = HEALTH_DATA_DISPLAY_UNITS_LEGACY.get(display_unit)
+            if ucum:
+                return (display or display_unit, ucum)
+
+        from ingestors.health_data_constants import HEALTH_DATA_UCUM_UNITS
+
+        return (display_unit, HEALTH_DATA_UCUM_UNITS.get(display_unit, display_unit))
+
     def create_base_observation(
         self,
         patient_reference: str,
