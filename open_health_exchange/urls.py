@@ -19,7 +19,6 @@ from django.contrib import admin
 from django.urls import include, path
 
 import base.urls
-from webhooks.views import fitbit_webhook_handler
 
 from .views import RootTimeView
 
@@ -31,6 +30,4 @@ urlpatterns = [
     path("api/base/", include(base.urls)),  # Main API endpoints
     path("webhooks/", include("webhooks.urls", namespace="webhooks")),  # Production webhook endpoints
     path("oidc/", include("mozilla_django_oidc.urls")),
-    # Legacy Fitbit notification URL (for Fitbit Developer Portal compatibility)
-    path("api/ingestors/fitbit/notifications/", fitbit_webhook_handler, name="fitbit-notifications-legacy"),
 ]
