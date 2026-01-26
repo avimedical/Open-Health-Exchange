@@ -209,8 +209,8 @@ def get_fitbit_circuit_breaker() -> CircuitBreaker:
 def get_fhir_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for FHIR server."""
     config = CircuitBreakerConfig(
-        failure_threshold=5,  # Higher threshold for FHIR server
-        success_threshold=3,  # Higher success threshold for FHIR
+        failure_threshold=settings.CIRCUIT_BREAKER_CONFIG["FHIR_FAILURE_THRESHOLD"],
+        success_threshold=settings.CIRCUIT_BREAKER_CONFIG["FHIR_SUCCESS_THRESHOLD"],
         timeout=settings.CIRCUIT_BREAKER_CONFIG["FHIR_TIMEOUT"],
         exceptions=(Exception,),
     )

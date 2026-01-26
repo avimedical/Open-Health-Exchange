@@ -9,10 +9,15 @@ from typing import Any, cast
 from django.utils import timezone
 
 from ingestors.health_data_constants import (
+    BLOOD_PRESSURE_COMPONENT_CODES,
+    BODY_COMPOSITION_CODES,
+    FHIR_UNITS,
     HEALTH_DATA_DISPLAY_NAMES,
     HEALTH_DATA_FHIR_CATEGORIES,
     HEALTH_DATA_LOINC_CODES,
     HEALTH_DATA_UCUM_UNITS,
+    RR_INTERVAL_LOINC,
+    SLEEP_COMPONENT_CODES,
     HealthDataRecord,
     HealthDataType,
 )
@@ -141,7 +146,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
         # Add provider-specific identifier using compatibility strategy
         # For blood pressure, include both LOINC codes in identifier for uniqueness
-        secondary_loinc = "8462-4" if record.data_type == HealthDataType.BLOOD_PRESSURE else None
+        secondary_loinc = (
+            BLOOD_PRESSURE_COMPONENT_CODES["diastolic"] if record.data_type == HealthDataType.BLOOD_PRESSURE else None
+        )
         observation["identifier"] = self.create_observation_identifier(
             provider=record.provider,
             patient_id=patient_id,
@@ -192,9 +199,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": "bpm",
+                "unit": FHIR_UNITS["heart_rate"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "{beats}/min",
+                "code": FHIR_UNITS["heart_rate"]["code"],
             }
         }
 
@@ -203,9 +210,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": "steps",
+                "unit": FHIR_UNITS["steps"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "[count]",  # UCUM code for count
+                "code": FHIR_UNITS["steps"]["code"],
             }
         }
 
@@ -238,27 +245,35 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 {
                     "code": {
                         "coding": [
-                            {"system": "http://loinc.org", "code": "8480-6", "display": "Systolic blood pressure"}
+                            {
+                                "system": "http://loinc.org",
+                                "code": BLOOD_PRESSURE_COMPONENT_CODES["systolic"],
+                                "display": "Systolic blood pressure",
+                            }
                         ]
                     },
                     "valueQuantity": {
                         "value": float(systolic),
-                        "unit": "mmHg",
+                        "unit": FHIR_UNITS["blood_pressure"]["display"],
                         "system": "http://unitsofmeasure.org",
-                        "code": "mm[Hg]",
+                        "code": FHIR_UNITS["blood_pressure"]["code"],
                     },
                 },
                 {
                     "code": {
                         "coding": [
-                            {"system": "http://loinc.org", "code": "8462-4", "display": "Diastolic blood pressure"}
+                            {
+                                "system": "http://loinc.org",
+                                "code": BLOOD_PRESSURE_COMPONENT_CODES["diastolic"],
+                                "display": "Diastolic blood pressure",
+                            }
                         ]
                     },
                     "valueQuantity": {
                         "value": float(diastolic),
-                        "unit": "mmHg",
+                        "unit": FHIR_UNITS["blood_pressure"]["display"],
                         "system": "http://unitsofmeasure.org",
-                        "code": "mm[Hg]",
+                        "code": FHIR_UNITS["blood_pressure"]["code"],
                     },
                 },
             ]
@@ -305,9 +320,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": "%",
+                "unit": FHIR_UNITS["spo2"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "%",
+                "code": FHIR_UNITS["spo2"]["code"],
             }
         }
 
@@ -321,7 +336,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
                     "component": [
                         {
                             "code": {
-                                "coding": [{"system": "http://loinc.org", "code": "8637-1", "display": "R-R interval"}]
+                                "coding": [
+                                    {"system": "http://loinc.org", "code": RR_INTERVAL_LOINC, "display": "R-R interval"}
+                                ]
                             },
                             "valueString": f"RR intervals: {intervals}",
                         }
@@ -332,9 +349,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": "ms",
+                "unit": FHIR_UNITS["time_ms"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "ms",
+                "code": FHIR_UNITS["time_ms"]["code"],
             }
         }
 
@@ -349,13 +366,19 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 components.append(
                     {
                         "code": {
-                            "coding": [{"system": "http://loinc.org", "code": "93831-6", "display": "Total sleep time"}]
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": SLEEP_COMPONENT_CODES["total_sleep_time"],
+                                    "display": "Total sleep time",
+                                }
+                            ]
                         },
                         "valueQuantity": {
                             "value": float(record.value["total_sleep_time"]),
-                            "unit": "minutes",
+                            "unit": FHIR_UNITS["time_min"]["display"],
                             "system": "http://unitsofmeasure.org",
-                            "code": "min",
+                            "code": FHIR_UNITS["time_min"]["code"],
                         },
                     }
                 )
@@ -365,13 +388,19 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 components.append(
                     {
                         "code": {
-                            "coding": [{"system": "http://loinc.org", "code": "93830-8", "display": "Sleep efficiency"}]
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": SLEEP_COMPONENT_CODES["sleep_efficiency"],
+                                    "display": "Sleep efficiency",
+                                }
+                            ]
                         },
                         "valueQuantity": {
                             "value": float(record.value["sleep_efficiency"]),
-                            "unit": "%",
+                            "unit": FHIR_UNITS["spo2"]["display"],
                             "system": "http://unitsofmeasure.org",
-                            "code": "%",
+                            "code": FHIR_UNITS["spo2"]["code"],
                         },
                     }
                 )
@@ -386,9 +415,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
             return {
                 "valueQuantity": {
                     "value": self.safe_convert_value(record.value, float),
-                    "unit": record.unit or "minutes",
+                    "unit": record.unit or FHIR_UNITS["time_min"]["display"],
                     "system": "http://unitsofmeasure.org",
-                    "code": "min",
+                    "code": FHIR_UNITS["time_min"]["code"],
                 }
             }
 
@@ -397,9 +426,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
         return {
             "valueQuantity": {
                 "value": self.safe_convert_value(record.value, float),
-                "unit": record.unit or "m/s",
+                "unit": record.unit or FHIR_UNITS["velocity"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "m/s",
+                "code": FHIR_UNITS["velocity"]["code"],
             }
         }
 
@@ -414,13 +443,19 @@ class HealthDataTransformer(BaseFHIRTransformer):
                 components.append(
                     {
                         "code": {
-                            "coding": [{"system": "http://loinc.org", "code": "73708-0", "display": "Fat mass by DEXA"}]
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": BODY_COMPOSITION_CODES["fat_mass"],
+                                    "display": "Fat mass by DEXA",
+                                }
+                            ]
                         },
                         "valueQuantity": {
                             "value": float(record.value["fat_mass"]),
-                            "unit": record.unit or "kg",
+                            "unit": record.unit or FHIR_UNITS["weight"]["display"],
                             "system": "http://unitsofmeasure.org",
-                            "code": "kg",
+                            "code": FHIR_UNITS["weight"]["code"],
                         },
                     }
                 )
@@ -433,16 +468,16 @@ class HealthDataTransformer(BaseFHIRTransformer):
                             "coding": [
                                 {
                                     "system": "http://loinc.org",
-                                    "code": "41982-0",
+                                    "code": BODY_COMPOSITION_CODES["fat_percentage"],
                                     "display": "Percentage of body fat Measured",
                                 }
                             ]
                         },
                         "valueQuantity": {
                             "value": float(record.value["fat_percentage"]),
-                            "unit": "%",
+                            "unit": FHIR_UNITS["spo2"]["display"],
                             "system": "http://unitsofmeasure.org",
-                            "code": "%",
+                            "code": FHIR_UNITS["spo2"]["code"],
                         },
                     }
                 )
@@ -453,14 +488,18 @@ class HealthDataTransformer(BaseFHIRTransformer):
                     {
                         "code": {
                             "coding": [
-                                {"system": "http://loinc.org", "code": "73964-9", "display": "Muscle mass by DEXA"}
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": BODY_COMPOSITION_CODES["muscle_mass"],
+                                    "display": "Muscle mass by DEXA",
+                                }
                             ]
                         },
                         "valueQuantity": {
                             "value": float(record.value["muscle_mass"]),
-                            "unit": record.unit or "kg",
+                            "unit": record.unit or FHIR_UNITS["weight"]["display"],
                             "system": "http://unitsofmeasure.org",
-                            "code": "kg",
+                            "code": FHIR_UNITS["weight"]["code"],
                         },
                     }
                 )
@@ -474,9 +513,9 @@ class HealthDataTransformer(BaseFHIRTransformer):
             return {
                 "valueQuantity": {
                     "value": self.safe_convert_value(record.value, float),
-                    "unit": record.unit or "kg",
+                    "unit": record.unit or FHIR_UNITS["weight"]["display"],
                     "system": "http://unitsofmeasure.org",
-                    "code": "kg",
+                    "code": FHIR_UNITS["weight"]["code"],
                 }
             }
 

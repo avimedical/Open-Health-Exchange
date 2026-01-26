@@ -745,12 +745,12 @@ FHIR_COMPATIBILITY_CONFIG = {
 
 #### Unit Encoding
 
-| Measurement | Legacy Display | Legacy Code | Modern Display | Modern Code |
-|-------------|---------------|-------------|----------------|-------------|
-| Temperature | `C` | `°C` | `°C` | `Cel` |
-| All other units | Same | Same | Same | Same |
+| Measurement | Display | UCUM Code |
+|-------------|---------|-----------|
+| Temperature | `°C` | `Cel` |
+| All other units | Same in both modes | Same in both modes |
 
-> **Note:** inwithings uses `°C` as the UCUM code for temperature, which is non-standard. The correct UCUM code is `Cel`. Legacy mode preserves this behavior for compatibility.
+> **Note:** Temperature uses the standard UCUM code `Cel` in all modes. While inwithings historically used non-standard encoding, OHE follows proper UCUM standards for better FHIR compliance.
 
 #### Observation Structure
 

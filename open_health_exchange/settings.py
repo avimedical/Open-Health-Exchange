@@ -482,6 +482,8 @@ CIRCUIT_BREAKER_CONFIG = {
     "FAILURE_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "2")),
     "SUCCESS_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", "2")),  # Externalized per PR review
     "FHIR_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_FHIR_TIMEOUT", "30.0")),
+    "FHIR_FAILURE_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_FHIR_THRESHOLD", "5")),  # Higher for FHIR server
+    "FHIR_SUCCESS_THRESHOLD": int(os.environ.get("CIRCUIT_BREAKER_FHIR_SUCCESS_THRESHOLD", "3")),
     "WEBHOOK_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_WEBHOOK_TIMEOUT", "30.0")),
     "PROVIDER_TIMEOUT": float(os.environ.get("CIRCUIT_BREAKER_PROVIDER_TIMEOUT", "60.0")),
 }
