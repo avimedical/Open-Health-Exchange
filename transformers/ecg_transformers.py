@@ -12,7 +12,12 @@ Supports backwards compatibility with inwithings:
 import logging
 from typing import Any
 
-from ingestors.health_data_constants import HealthDataRecord
+from ingestors.health_data_constants import (
+    ECG_LOINC,
+    FHIR_UNITS,
+    HEART_RATE_LOINC,
+    HealthDataRecord,
+)
 
 from .base_fhir_transformer import BaseFHIRTransformer
 from .identifier_utils import generate_resource_uuid
@@ -79,7 +84,7 @@ class ECGTransformer(BaseFHIRTransformer):
         patient_id = patient_reference.split("/")[-1] if "/" in patient_reference else patient_reference
 
         # Generate deterministic UUID for ECG Observation resource ID
-        resource_id = generate_resource_uuid("Observation", f"{patient_id}:{record.timestamp.isoformat()}:8601-7")
+        resource_id = generate_resource_uuid("Observation", f"{patient_id}:{record.timestamp.isoformat()}:{ECG_LOINC}")
 
         # Create base observation with LOINC 8601-7 (EKG impression)
         observation: dict[str, Any] = {
@@ -98,7 +103,7 @@ class ECGTransformer(BaseFHIRTransformer):
                 }
             ],
             "code": {
-                "coding": [{"system": "http://loinc.org", "code": "8601-7", "display": "EKG impression"}],
+                "coding": [{"system": "http://loinc.org", "code": ECG_LOINC, "display": "EKG impression"}],
                 "text": "Electrocardiogram",
             },
             "subject": {"reference": patient_reference},
@@ -126,7 +131,7 @@ class ECGTransformer(BaseFHIRTransformer):
             provider=record.provider,
             patient_id=patient_id,
             timestamp=record.timestamp,
-            loinc_code="8601-7",
+            loinc_code=ECG_LOINC,
         )
 
         # Component 1: EKG impression/AFib classification
@@ -141,7 +146,9 @@ class ECGTransformer(BaseFHIRTransformer):
             # Also add as component for compatibility
             observation["component"].append(
                 {
-                    "code": {"coding": [{"system": "http://loinc.org", "code": "8601-7", "display": "EKG impression"}]},
+                    "code": {
+                        "coding": [{"system": "http://loinc.org", "code": ECG_LOINC, "display": "EKG impression"}]
+                    },
                     "valueString": result_classification,
                 }
             )
@@ -157,12 +164,14 @@ class ECGTransformer(BaseFHIRTransformer):
             # Modern mode: HR as component of ECG observation
             observation["component"].append(
                 {
-                    "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}]},
+                    "code": {
+                        "coding": [{"system": "http://loinc.org", "code": HEART_RATE_LOINC, "display": "Heart rate"}]
+                    },
                     "valueQuantity": {
                         "value": heart_rate_value,
-                        "unit": "bpm",
+                        "unit": FHIR_UNITS["heart_rate"]["display"],
                         "system": "http://unitsofmeasure.org",
-                        "code": "{beats}/min",
+                        "code": FHIR_UNITS["heart_rate"]["code"],
                     },
                 }
             )
@@ -347,7 +356,7 @@ class ECGTransformer(BaseFHIRTransformer):
 
         # Generate deterministic UUID for HR Observation resource ID (from ECG)
         resource_id = generate_resource_uuid(
-            "Observation", f"{patient_id}:{record.timestamp.isoformat()}:8867-4:from-ecg"
+            "Observation", f"{patient_id}:{record.timestamp.isoformat()}:{HEART_RATE_LOINC}:from-ecg"
         )
 
         # Create HR observation
@@ -367,16 +376,16 @@ class ECGTransformer(BaseFHIRTransformer):
                 }
             ],
             "code": {
-                "coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}],
+                "coding": [{"system": "http://loinc.org", "code": HEART_RATE_LOINC, "display": "Heart rate"}],
                 "text": "Heart rate",
             },
             "subject": {"reference": patient_reference},
             "effectiveDateTime": self.create_fhir_timestamp(record.timestamp),
             "valueQuantity": {
                 "value": float(record.value) if isinstance(record.value, int | float) else 0.0,
-                "unit": "bpm",
+                "unit": FHIR_UNITS["heart_rate"]["display"],
                 "system": "http://unitsofmeasure.org",
-                "code": "{beats}/min",
+                "code": FHIR_UNITS["heart_rate"]["code"],
             },
             "meta": self.create_fhir_meta(record.provider, record.measurement_source),
         }
@@ -390,7 +399,7 @@ class ECGTransformer(BaseFHIRTransformer):
             provider=record.provider,
             patient_id=patient_id,
             timestamp=record.timestamp,
-            loinc_code="8867-4",  # Heart rate LOINC
+            loinc_code=HEART_RATE_LOINC,
         )
 
         # Add device info based on compatibility mode

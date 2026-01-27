@@ -245,6 +245,16 @@ HEALTH_DATA_LOINC_CODES_LEGACY = {
     # Other codes remain the same as HEALTH_DATA_LOINC_CODES
 }
 
+# Legacy UCUM codes (inwithings compatibility)
+# Note: Temperature now uses proper UCUM code "Cel" in all modes
+# per user request to follow UCUM standards
+HEALTH_DATA_UCUM_UNITS_LEGACY: dict[str, str] = {}
+
+# Legacy display units (inwithings compatibility)
+# Note: Temperature now uses standard display "°C" in all modes
+# per user request to follow UCUM standards
+HEALTH_DATA_DISPLAY_UNITS_LEGACY: dict[str, str] = {}
+
 # Observation linking rules for hasMember/derivedFrom relationships
 # Used when ENABLE_OBSERVATION_LINKING is enabled in FHIR_COMPATIBILITY_CONFIG
 OBSERVATION_LINKING_RULES: dict[HealthDataType, dict[str, Any]] = {
@@ -280,3 +290,39 @@ HEART_RATE_LOINC = "8867-4"
 
 # ECG LOINC code
 ECG_LOINC = "8601-7"
+
+# RR interval LOINC code
+RR_INTERVAL_LOINC = "8637-1"
+
+# Sleep component LOINC codes
+SLEEP_COMPONENT_CODES = {
+    "total_sleep_time": "93831-6",  # Total sleep time
+    "sleep_efficiency": "93830-8",  # Sleep efficiency
+}
+
+# Body composition component LOINC codes
+BODY_COMPOSITION_CODES = {
+    "fat_mass": "73708-0",  # Fat mass by DEXA
+    "fat_percentage": "41982-0",  # Percentage of body fat Measured
+    "muscle_mass": "73964-9",  # Muscle mass by DEXA
+}
+
+# ECG waveform LOINC code
+ECG_WAVEFORM_LOINC = "8628-0"
+
+# =====================================================
+# FHIR Unit Constants (UCUM codes)
+# =====================================================
+
+# Standard FHIR unit mappings (display unit -> UCUM code)
+FHIR_UNITS = {
+    "heart_rate": {"display": "bpm", "code": "{beats}/min"},
+    "steps": {"display": "steps", "code": "[count]"},
+    "blood_pressure": {"display": "mmHg", "code": "mm[Hg]"},
+    "weight": {"display": "kg", "code": "kg"},
+    "temperature": {"display": "°C", "code": "Cel"},
+    "spo2": {"display": "%", "code": "%"},
+    "time_ms": {"display": "ms", "code": "ms"},
+    "time_min": {"display": "minutes", "code": "min"},
+    "velocity": {"display": "m/s", "code": "m/s"},
+}

@@ -122,6 +122,8 @@ class TestUnifiedHealthDataClient:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -207,6 +209,8 @@ class TestWithingsDataFetching:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -340,6 +344,8 @@ class TestFitbitDataFetching:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -414,6 +420,8 @@ class TestTokenManagement:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -508,6 +516,8 @@ class TestRateLimiting:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -573,6 +583,8 @@ class TestWithingsResponseProcessing:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -736,6 +748,8 @@ class TestGlobalClient:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 

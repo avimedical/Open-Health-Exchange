@@ -414,6 +414,8 @@ class TestPredefinedCircuitBreakers:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 
@@ -469,6 +471,8 @@ class TestCircuitBreakerDecorators:
                 "SUCCESS_THRESHOLD": 3,
                 "PROVIDER_TIMEOUT": 60,
                 "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
             }
             yield mock
 

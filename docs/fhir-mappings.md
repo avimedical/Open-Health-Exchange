@@ -681,6 +681,159 @@ Observation identifiers support two strategies for backwards compatibility:
 
 The strategy is configurable via `FHIR_COMPATIBILITY_CONFIG["IDENTIFIER_STRATEGY"]` setting.
 
+## Legacy Mode (inwithings Compatibility)
+
+Open Health Exchange supports a legacy compatibility mode for seamless integration with existing inwithings (Withings SOL) deployments. This mode ensures FHIR resources match the exact format produced by the legacy system.
+
+### Configuration
+
+Legacy mode is controlled via `FHIR_COMPATIBILITY_CONFIG` in `settings.py`:
+
+```python
+FHIR_COMPATIBILITY_CONFIG = {
+    # Format mode: "legacy" (inwithings-compatible) or "modern" (FHIR R5 best practices)
+    "FORMAT_MODE": "legacy",
+
+    # Identifier generation: "jenkins_hash" (inwithings) or "modern" (UUID-based)
+    "IDENTIFIER_STRATEGY": "jenkins_hash",
+
+    # Observation status: "registered" (inwithings) or "final" (modern)
+    "OBSERVATION_STATUS": "registered",
+
+    # Include issued field with sync timestamp (inwithings behavior)
+    "INCLUDE_ISSUED_FIELD": True,
+
+    # Device info mode: "extension" (inwithings) or "reference" (separate Device resources)
+    "DEVICE_INFO_MODE": "extension",
+
+    # Include device-model extension
+    "INCLUDE_DEVICE_MODEL_EXTENSION": True,
+
+    # Bundle type: "batch" (inwithings, idempotent) or "transaction" (modern)
+    "BUNDLE_TYPE": "batch",
+
+    # Bundle method: "PUT" (inwithings, idempotent) or "POST" (modern)
+    "BUNDLE_METHOD": "PUT",
+
+    # Emit separate HR observation when ECG is processed
+    "ECG_EMIT_SEPARATE_HR": True,
+
+    # Enable observation linking via derivedFrom/hasMember
+    "ENABLE_OBSERVATION_LINKING": True,
+
+    # LOINC code overrides for backwards compatibility
+    "LOINC_OVERRIDES": {
+        "steps": "41950-7",  # inwithings uses 41950-7, modern uses 55423-8
+    },
+
+    # Use coded AFib interpretation (N/DET/IND) instead of valueString
+    "ECG_AFIB_CODED_INTERPRETATION": True,
+
+    # Identifier system URL template
+    "IDENTIFIER_SYSTEM_TEMPLATE": "https://api.{provider}.com/health-data",
+}
+```
+
+### Legacy vs Modern Mode Differences
+
+#### LOINC Codes
+
+| Data Type | Legacy (inwithings) | Modern |
+|-----------|---------------------|--------|
+| Steps | `41950-7` (Number of steps in 24 hour) | `55423-8` (Number of steps - Pedometer) |
+| All other types | Same | Same |
+
+#### Unit Encoding
+
+| Measurement | Display | UCUM Code |
+|-------------|---------|-----------|
+| Temperature | `°C` | `Cel` |
+| All other units | Same in both modes | Same in both modes |
+
+> **Note:** Temperature uses the standard UCUM code `Cel` in all modes. While inwithings historically used non-standard encoding, OHE follows proper UCUM standards for better FHIR compliance.
+
+#### Observation Structure
+
+| Attribute | Legacy Mode | Modern Mode |
+|-----------|-------------|-------------|
+| `status` | `"registered"` | `"final"` |
+| `issued` | Present (sync timestamp) | Omitted |
+| Device info | Extensions on Observation | Separate Device reference |
+| Identifier | Jenkins hash (32-bit integer) | UUID v5 |
+
+#### Legacy Observation Extensions
+
+In legacy mode, device information is stored as extensions on the Observation:
+
+```json
+{
+  "resourceType": "Observation",
+  "extension": [
+    {
+      "url": "obtained-from",
+      "valueString": "withings"
+    },
+    {
+      "url": "external-device-id",
+      "valueString": "12345"
+    },
+    {
+      "url": "device-model",
+      "valueString": "ScanWatch"
+    }
+  ],
+  "status": "registered",
+  "issued": "2023-12-07T10:35:00Z"
+}
+```
+
+#### Modern Observation Structure
+
+In modern mode, device information uses standard FHIR references:
+
+```json
+{
+  "resourceType": "Observation",
+  "status": "final",
+  "device": {
+    "reference": "Device/6ecef061-b47c-5bf6-ac7f-5bc2590ab1f2"
+  }
+}
+```
+
+### Environment Variable Overrides
+
+All legacy mode settings can be overridden via environment variables:
+
+| Setting | Environment Variable | Default |
+|---------|---------------------|---------|
+| Format Mode | `FHIR_FORMAT_MODE` | `legacy` |
+| Identifier Strategy | `FHIR_IDENTIFIER_STRATEGY` | `jenkins_hash` |
+| Observation Status | `FHIR_OBSERVATION_STATUS` | `registered` |
+| Include Issued | `FHIR_INCLUDE_ISSUED` | `true` |
+| Device Info Mode | `FHIR_DEVICE_INFO_MODE` | `extension` |
+| Bundle Type | `FHIR_BUNDLE_TYPE` | `batch` |
+| Bundle Method | `FHIR_BUNDLE_METHOD` | `PUT` |
+| Steps LOINC Override | `FHIR_LOINC_STEPS` | `41950-7` |
+
+### Migration to Modern Mode
+
+To switch from legacy to modern mode:
+
+```bash
+# Set environment variables for modern mode
+export FHIR_FORMAT_MODE=modern
+export FHIR_IDENTIFIER_STRATEGY=modern
+export FHIR_OBSERVATION_STATUS=final
+export FHIR_INCLUDE_ISSUED=false
+export FHIR_DEVICE_INFO_MODE=reference
+export FHIR_BUNDLE_TYPE=transaction
+export FHIR_BUNDLE_METHOD=POST
+export FHIR_LOINC_STEPS=55423-8
+```
+
+> **Warning:** Switching modes will change resource identifiers and structure. Ensure downstream systems are prepared for the new format before migrating.
+
 ## Error Handling and Data Quality
 
 ### Missing Data Handling
