@@ -436,16 +436,15 @@ HUEY = PriorityRedisExpireHuey(
     utc=True,
 )
 
-# Use different DB (1) for cache to avoid conflicts with Huey (DB 0)
-CACHE_REDIS_URL = os.environ.get("REDIS_CACHE_URL", "redis://localhost:6379/1")
-
+# Cache uses same Redis URL as Huey, with key prefix for namespace separation
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": CACHE_REDIS_URL,
+        "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
+        "KEY_PREFIX": "ohe",
     }
 }
 
