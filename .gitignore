@@ -18,3 +18,4 @@ coverage.xml
 *.sqlite3
 *.db
 .DS_Store
+Open-Health-Exchange.code-workspace
