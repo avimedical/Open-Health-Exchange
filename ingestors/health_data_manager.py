@@ -5,7 +5,7 @@ Health data managers for fetching health data from different providers
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from django.contrib.auth import get_user_model
 from social_django.models import UserSocialAuth
@@ -55,7 +55,7 @@ class BaseHealthDataManager(ABC):
         """Get user's social auth for this provider"""
         try:
             user = User.objects.get(ehr_user_id=user_id)
-            return UserSocialAuth.objects.get(user=user, provider=self.provider.value)
+            return cast(UserSocialAuth, UserSocialAuth.objects.get(user=user, provider=self.provider.value))
         except (User.DoesNotExist, UserSocialAuth.DoesNotExist) as e:
             raise ValueError(f"User {user_id} not found or not connected to {self.provider.value}") from e
 

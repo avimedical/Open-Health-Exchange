@@ -937,7 +937,7 @@ class UnifiedHealthDataClient:
 
             user = User.objects.get(ehr_user_id=user_id)
             social_auth = UserSocialAuth.objects.get(user=user, provider=provider.value)
-            return social_auth
+            return cast(UserSocialAuth, social_auth)
         except Exception as e:
             raise APIError(f"Failed to get user tokens for {user_id}: {e}")
 
