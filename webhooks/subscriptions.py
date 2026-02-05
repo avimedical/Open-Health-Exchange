@@ -6,6 +6,7 @@ Handles creating, updating, and deleting webhook subscriptions
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import requests
 from django.conf import settings
@@ -363,7 +364,7 @@ class WebhookSubscriptionManager:
 
             user = User.objects.get(ehr_user_id=user_id)
             social_auth = UserSocialAuth.objects.get(user=user, provider=provider.value)
-            return social_auth
+            return cast(UserSocialAuth, social_auth)
 
         except Exception as e:
             raise WebhookSubscriptionError(f"User {user_id} not connected to {provider.value}: {e}")
