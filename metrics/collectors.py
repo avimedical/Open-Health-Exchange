@@ -7,7 +7,6 @@ import time
 
 import redis
 from django.core.cache import cache
-from django.db import connection
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info
 
 logger = logging.getLogger(__name__)
@@ -87,8 +86,6 @@ WEBHOOK_PROCESSING_TIME = Histogram(
 )
 
 # System health metrics
-DATABASE_CONNECTIONS = Gauge("ohe_database_connections", "Number of active database connections", registry=app_registry)
-
 REDIS_CONNECTIONS = Gauge("ohe_redis_connections", "Number of active Redis connections", registry=app_registry)
 
 HUEY_QUEUE_SIZE = Gauge("ohe_huey_queue_size", "Number of tasks in Huey queue", registry=app_registry)
@@ -161,16 +158,14 @@ class MetricsCollector:
     def update_system_metrics(self):
         """Update system health metrics."""
         try:
-            # Database connections
-            db_connections = len(connection.queries) if hasattr(connection, "queries") else 0
-            DATABASE_CONNECTIONS.set(db_connections)
-
-            # Redis connections (if available)
+            # Redis connections (if available via django-redis backend)
             try:
-                redis_info = cache._cache.get_client().info()
-                REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
+                # Only attempt if cache backend supports get_client() (e.g., django-redis)
+                if hasattr(cache, "_cache") and hasattr(cache._cache, "get_client"):
+                    redis_info = cache._cache.get_client().info()
+                    REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
             except Exception:
-                pass
+                pass  # Expected for non-Redis backends
 
             # Huey queue size (approximation via Redis)
             try:

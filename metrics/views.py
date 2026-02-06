@@ -31,8 +31,8 @@ class MetricsView(View):
 
             return HttpResponse(data, content_type=CONTENT_TYPE_LATEST)
 
-        except Exception as e:
-            logger.error(f"Failed to generate metrics: {e}")
+        except Exception:
+            logger.exception("Failed to generate metrics")
             return HttpResponse("Error generating metrics", status=500)
 
 

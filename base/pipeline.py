@@ -273,21 +273,21 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
             from ingestors.health_data_tasks import sync_user_health_data_initial
             from ingestors.tasks import ensure_webhook_subscriptions, sync_user_devices
 
-            # Queue device sync (high priority)
-            sync_user_devices(user.ehr_user_id, provider_name)
+            # Queue device sync (high priority) - async to not block OAuth callback
+            sync_user_devices.delay(user.ehr_user_id, provider_name)
 
-            # Queue health data sync (low priority for initial sync)
+            # Queue health data sync (low priority for initial sync) - async
             if effective_data_types:  # Only sync if data types are configured
-                sync_user_health_data_initial(
+                sync_user_health_data_initial.delay(
                     user.ehr_user_id,
                     provider_name,
                     lookback_days=settings.HEALTH_DATA_CONFIG["LOOKBACK_DAYS"],
                     data_types=effective_data_types,
                 )
 
-            # Queue webhook subscription creation (medium priority, async)
+            # Queue webhook subscription creation (medium priority) - async
             if webhook_enabled and effective_data_types:
-                ensure_webhook_subscriptions(user.ehr_user_id, provider_name, data_types=effective_data_types)
+                ensure_webhook_subscriptions.delay(user.ehr_user_id, provider_name, data_types=effective_data_types)
                 logger.info(f"Queued webhook subscription creation for user {user.ehr_user_id}")
             else:
                 logger.info(f"Webhooks disabled or no data types configured for {provider_name}")

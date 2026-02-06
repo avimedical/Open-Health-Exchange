@@ -111,9 +111,20 @@ def nightly_device_sync() -> list[dict]:
                 logger.warning(f"No access token found for provider link {link.pk}")
                 continue
 
-            # Queue device sync task
-            result = sync_user_devices(user_id=link.user.ehr_user_id, provider_name=link.provider.provider_type)
-            sync_results.append(result)
+            # Queue device sync task asynchronously
+            task = sync_user_devices.delay(
+                user_id=link.user.ehr_user_id,
+                provider_name=link.provider.provider_type,
+            )
+            sync_results.append(
+                {
+                    "task_id": getattr(task, "id", None),
+                    "queued": True,
+                    "link_id": link.pk,
+                    "user_id": link.user.ehr_user_id,
+                    "provider": link.provider.provider_type,
+                }
+            )
 
             logger.info(f"Queued device sync for user {link.user.ehr_user_id} with {link.provider.provider_type}")
 
