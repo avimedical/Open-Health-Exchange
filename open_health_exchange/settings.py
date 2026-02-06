@@ -29,7 +29,8 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN")
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        environment=os.environ.get("ENVIRONMENT", "development"),
+        # Check both ENVIRONMENT and env (cluster provides lowercase 'env')
+        environment=os.environ.get("ENVIRONMENT") or os.environ.get("env", "development"),
         send_default_pii=True,
         traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
         profiles_sample_rate=float(os.environ.get("SENTRY_PROFILES_SAMPLE_RATE", "0.1")),
