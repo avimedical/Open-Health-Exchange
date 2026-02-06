@@ -38,13 +38,31 @@ class TestAssociateByTokenUser:
         backend.name = "withings"
         return backend
 
-    def test_associate_with_existing_user(self, mock_strategy, mock_backend):
-        """Test association when user is already provided."""
+    def test_associate_with_existing_user_no_session(self, mock_strategy, mock_backend):
+        """Test association when user is already provided but no session linking data."""
         existing_user = MagicMock()
         result = associate_by_token_user(mock_strategy, {}, mock_backend, user=existing_user)
 
-        # Should return None and use existing user
+        # Should return None and keep existing user when no session override
         assert result is None
+
+    def test_session_ehr_user_overrides_existing_user(self, mock_strategy, mock_backend):
+        """Test that session EHR user ID always takes priority over existing user."""
+        mock_strategy.session["linking_ehr_user_id"] = "correct-ehr-123"
+        mock_strategy.session["linking_provider"] = "withings"
+
+        wrong_user = MagicMock()
+        wrong_user.username = "wrong-user"
+        correct_user = MagicMock()
+        correct_user.username = "correct-user"
+
+        with patch("base.models.EHRUser") as mock_ehr_user:
+            mock_ehr_user.objects.get.return_value = correct_user
+
+            result = associate_by_token_user(mock_strategy, {}, mock_backend, user=wrong_user)
+
+            assert result == {"user": correct_user}
+            mock_ehr_user.objects.get.assert_called_once_with(ehr_user_id="correct-ehr-123")
 
     def test_associate_by_session_ehr_user_id(self, mock_strategy, mock_backend):
         """Test association via EHR user ID in session."""
@@ -62,8 +80,8 @@ class TestAssociateByTokenUser:
             assert result == {"user": mock_user}
             mock_ehr_user.objects.get.assert_called_once_with(ehr_user_id="ehr-123")
 
-    def test_associate_clears_session_after_use(self, mock_strategy, mock_backend):
-        """Test that session EHR user ID is cleared after association."""
+    def test_associate_preserves_session_for_success_view(self, mock_strategy, mock_backend):
+        """Test that session EHR user ID is preserved for ProviderLinkSuccessView to read."""
         mock_strategy.session["linking_ehr_user_id"] = "ehr-123"
 
         mock_user = MagicMock()
@@ -72,8 +90,8 @@ class TestAssociateByTokenUser:
 
             associate_by_token_user(mock_strategy, {}, mock_backend)
 
-            # Session should be cleared
-            assert mock_strategy.session.get("linking_ehr_user_id") is None
+            # Session should NOT be cleared - ProviderLinkSuccessView needs it
+            assert mock_strategy.session.get("linking_ehr_user_id") == "ehr-123"
 
     def test_associate_user_not_found_tries_other_methods(self, mock_strategy, mock_backend):
         """Test fallback when EHR user not found."""
@@ -133,8 +151,7 @@ class TestHandleExistingSocialAssociation:
     def test_handle_no_existing_association(self, mock_strategy, mock_backend):
         """Test returns None when no existing association."""
         with patch("base.pipeline.UserSocialAuth") as mock_social_auth:
-            mock_social_auth.DoesNotExist = Exception
-            mock_social_auth.objects.get.side_effect = mock_social_auth.DoesNotExist
+            mock_social_auth.objects.filter.return_value.count.return_value = 0
 
             result = handle_existing_social_association(
                 mock_strategy, {}, mock_backend, user=MagicMock(), uid="uid-123"
@@ -151,14 +168,25 @@ class TestHandleExistingSocialAssociation:
         mock_existing_social.user = mock_user
 
         with patch("base.pipeline.UserSocialAuth") as mock_social_auth:
-            mock_social_auth.objects.get.return_value = mock_existing_social
+            # filter(provider, uid) returns queryset with 1 result
+            mock_qs = MagicMock()
+            mock_qs.count.return_value = 1
+            mock_qs.filter.return_value.first.return_value = mock_existing_social  # own_social
+            mock_qs.exclude.return_value = []  # no other users
+            mock_social_auth.objects.filter.return_value = mock_qs
+
+            # For the duplicate check queryset
+            mock_own_qs = MagicMock()
+            mock_own_qs.count.return_value = 1
+            # Second call to filter is for duplicate check
+            mock_social_auth.objects.filter.side_effect = [mock_qs, mock_own_qs]
 
             result = handle_existing_social_association(mock_strategy, {}, mock_backend, user=mock_user, uid="uid-123")
 
             assert result == {"social": mock_existing_social, "is_new": False}
 
-    def test_handle_reassociate_to_new_user(self, mock_strategy, mock_backend):
-        """Test reassociates social auth from old user to new user."""
+    def test_handle_deletes_old_user_association(self, mock_strategy, mock_backend):
+        """Test deletes social auth from old user and lets pipeline create fresh one."""
         old_user = MagicMock()
         old_user.ehr_user_id = "old-ehr-123"
 
@@ -168,24 +196,32 @@ class TestHandleExistingSocialAssociation:
         mock_existing_social = MagicMock()
         mock_existing_social.user = old_user
 
-        with patch.object(
-            __import__("social_django.models", fromlist=["UserSocialAuth"]).UserSocialAuth.objects,
-            "get",
-            return_value=mock_existing_social,
-        ):
+        with patch("base.pipeline.UserSocialAuth") as mock_social_auth:
+            # filter(provider, uid) returns queryset with 1 result for old user
+            mock_qs = MagicMock()
+            mock_qs.count.return_value = 1
+            mock_qs.filter.return_value.first.return_value = None  # no own_social
+            mock_qs.exclude.return_value = [mock_existing_social]  # old user's social
+            mock_social_auth.objects.filter.return_value = mock_qs
+
             with patch("base.models.ProviderLink") as mock_provider_link:
                 mock_old_link = MagicMock()
                 mock_provider_link.objects.filter.return_value.first.return_value = mock_old_link
+
+                # For the duplicate check queryset (own_socials)
+                mock_own_qs = MagicMock()
+                mock_own_qs.count.return_value = 0
+                mock_social_auth.objects.filter.side_effect = [mock_qs, mock_own_qs]
 
                 result = handle_existing_social_association(
                     mock_strategy, {}, mock_backend, user=new_user, uid="uid-123"
                 )
 
-                # Should reassociate and delete old link
-                assert mock_existing_social.user == new_user
-                mock_existing_social.save.assert_called_once()
+                # Should delete old social auth and old ProviderLink
+                mock_existing_social.delete.assert_called_once()
                 mock_old_link.delete.assert_called_once()
-                assert result == {"social": mock_existing_social, "is_new": False}
+                # Returns None to let pipeline create fresh association
+                assert result is None
 
 
 class TestCreateProviderLink:
