@@ -12,7 +12,7 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
     """
     Associate the current authenticated user with the social account.
     Uses multiple methods to identify the target EHR user:
-    1. Session-stored EHR user ID (preferred for provider linking)
+    1. Session-stored EHR user ID (always takes priority - this is the provider linking flow)
     2. Bearer token from request/session (for API calls)
     3. Currently authenticated user
     """
@@ -22,34 +22,35 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
     session_keys = [k for k in strategy.session.keys() if "linking" in k]
     logger.info(f"Session keys with 'linking': {session_keys}")
 
+    if user:
+        logger.info(
+            f"Pipeline already has user set: {user.username} (ehr_user_id: {getattr(user, 'ehr_user_id', 'N/A')})"
+        )
+
+    # Method 1: Check for EHR user ID stored in session (provider linking flow)
+    # This ALWAYS takes priority, even if user is already set by social_core,
+    # because the session contains the correct EHR user from the linking initiation.
+    ehr_user_id = strategy.session_get("linking_ehr_user_id")
+    provider_from_session = strategy.session_get("linking_provider")
+
+    logger.info(f"Session data - EHR User ID: {ehr_user_id}, Provider: {provider_from_session}")
+
+    if ehr_user_id:
+        logger.info(f"Found EHR user ID in session: {ehr_user_id}")
+        try:
+            from base.models import EHRUser
+
+            target_user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
+            if user and user != target_user:
+                logger.warning(f"Overriding pipeline user {user.username} with session EHR user {target_user.username}")
+            logger.info(f"Successfully retrieved user {target_user.username} for provider linking")
+
+            return {"user": target_user}
+        except EHRUser.DoesNotExist:
+            logger.error(f"EHR user with ID {ehr_user_id} not found in database")
+            logger.warning(f"EHR user {ehr_user_id} not found, trying other authentication methods")
+
     if not user:
-        target_user = None
-
-        # Method 1: Check for EHR user ID stored in session (provider linking flow)
-        ehr_user_id = strategy.session_get("linking_ehr_user_id")
-        provider_from_session = strategy.session_get("linking_provider")
-
-        logger.info(f"Session data - EHR User ID: {ehr_user_id}, Provider: {provider_from_session}")
-
-        if ehr_user_id:
-            logger.info(f"Found EHR user ID in session: {ehr_user_id}")
-            try:
-                from base.models import EHRUser
-
-                target_user = EHRUser.objects.get(ehr_user_id=ehr_user_id)
-                logger.info(f"Successfully retrieved user {target_user.username} for provider linking")
-
-                # Clear the session data after use
-                strategy.session_set("linking_ehr_user_id", None)
-
-                return {"user": target_user}
-            except EHRUser.DoesNotExist:
-                logger.error(f"EHR user with ID {ehr_user_id} not found in database")
-                # Don't immediately fail - try other methods first
-                logger.warning(f"EHR user {ehr_user_id} not found, trying other authentication methods")
-        else:
-            logger.warning("No EHR user ID found in session - session may have been lost during OAuth redirect")
-
         # Method 2: Bearer token from request/session (API-based auth)
         bearer_token = strategy.request.GET.get("token") or strategy.session_get("token")
         if bearer_token:
@@ -83,8 +84,11 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
 def handle_existing_social_association(strategy, details, backend, user=None, uid=None, *args, **kwargs):
     """
     Handle the case where a social account is already linked to a different user.
-    If the social account exists and belongs to a different EHR user, reassociate it
-    to the new user (unlinking from the old user).
+    If the social account exists and belongs to a different EHR user, delete the old
+    association and let the pipeline create a fresh one for the new user.
+
+    Also cleans up any duplicate UserSocialAuth records for the same provider+uid
+    to prevent 'get() returned more than one' errors in downstream code.
 
     This allows users to relink their health provider accounts if they've changed
     EHR systems or if there was a previous incorrect association.
@@ -94,48 +98,62 @@ def handle_existing_social_association(strategy, details, backend, user=None, ui
 
     provider = backend.name
 
-    # Check if this social account already exists
-    try:
-        existing_social = UserSocialAuth.objects.get(provider=provider, uid=uid)
+    # Find ALL existing social auths for this provider+uid (handles duplicates)
+    existing_socials = UserSocialAuth.objects.filter(provider=provider, uid=uid)
+    count = existing_socials.count()
 
-        if existing_social.user != user:
-            old_user = existing_social.user
-            logger.warning(
-                f"Social account {provider}:{uid} is already linked to user {old_user.ehr_user_id}. "
-                f"Reassociating to new user {user.ehr_user_id}."
-            )
-
-            # Also update/delete the ProviderLink for the old user
-            try:
-                from base.models import ProviderLink
-
-                old_provider_link = ProviderLink.objects.filter(
-                    user=old_user,
-                    provider__provider_type=provider,
-                ).first()
-
-                if old_provider_link:
-                    logger.info(f"Removing old ProviderLink for user {old_user.ehr_user_id}")
-                    old_provider_link.delete()
-            except Exception as e:
-                logger.warning(f"Error cleaning up old ProviderLink: {e}")
-
-            # Reassociate the social auth to the new user
-            existing_social.user = user
-            existing_social.save()
-
-            logger.info(f"Successfully reassociated {provider}:{uid} from {old_user.ehr_user_id} to {user.ehr_user_id}")
-
-            # Return the existing social auth to skip creation in later pipeline steps
-            return {"social": existing_social, "is_new": False}
-        else:
-            # Same user, just return the existing association
-            logger.info(f"Social account {provider}:{uid} already linked to current user {user.ehr_user_id}")
-            return {"social": existing_social, "is_new": False}
-
-    except UserSocialAuth.DoesNotExist:
+    if count == 0:
         # No existing association, let the pipeline continue normally
         return None
+
+    if count > 1:
+        logger.warning(f"Found {count} duplicate UserSocialAuth records for {provider}:{uid}, cleaning up")
+
+    # Check if any belong to the current user
+    own_social = existing_socials.filter(user=user).first()
+
+    # Delete all existing social auths for this provider+uid that belong to OTHER users
+    for existing_social in existing_socials.exclude(user=user):
+        old_user = existing_social.user
+        logger.warning(
+            f"Social account {provider}:{uid} is linked to user {old_user.ehr_user_id}. "
+            f"Deleting old association to relink to {user.ehr_user_id}."
+        )
+
+        # Clean up the old user's ProviderLink
+        try:
+            from base.models import ProviderLink
+
+            old_provider_link = ProviderLink.objects.filter(
+                user=old_user,
+                provider__provider_type=provider,
+            ).first()
+
+            if old_provider_link:
+                logger.info(f"Removing old ProviderLink for user {old_user.ehr_user_id}")
+                old_provider_link.delete()
+        except Exception as e:
+            logger.warning(f"Error cleaning up old ProviderLink: {e}")
+
+        existing_social.delete()
+        logger.info(f"Deleted old UserSocialAuth {provider}:{uid} for user {old_user.ehr_user_id}")
+
+    # Also clean up duplicates for the current user (keep only one)
+    own_socials = UserSocialAuth.objects.filter(provider=provider, uid=uid, user=user)
+    if own_socials.count() > 1:
+        logger.warning(f"Found {own_socials.count()} duplicate UserSocialAuth for current user, keeping newest")
+        # Keep the most recent one, delete the rest
+        latest = own_socials.order_by("-id").first()
+        own_socials.exclude(id=latest.id).delete()
+        own_social = latest
+
+    if own_social:
+        logger.info(f"Social account {provider}:{uid} already linked to current user {user.ehr_user_id}")
+        return {"social": own_social, "is_new": False}
+
+    # All old associations deleted, let the pipeline create a fresh one
+    logger.info(f"Old associations cleaned up, pipeline will create new UserSocialAuth for {user.ehr_user_id}")
+    return None
 
 
 def create_provider_link(strategy, details, backend, user, uid, response, *args, **kwargs):
