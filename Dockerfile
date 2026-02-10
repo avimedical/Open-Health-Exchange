@@ -3,6 +3,10 @@
 # Use Python slim for smaller image
 FROM python:3.14-slim AS base
 
+# Build arg for Sentry release tracking (pass git SHA at build time)
+ARG SENTRY_RELEASE=unknown
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
