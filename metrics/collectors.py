@@ -6,6 +6,7 @@ import logging
 import time
 
 import redis
+from django.conf import settings
 from django_redis import get_redis_connection
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info
 
@@ -158,26 +159,17 @@ class MetricsCollector:
     def update_system_metrics(self):
         """Update system health metrics."""
         try:
-            try:
-                # Use public django-redis API instead of internal _cache attribute
-                redis_client = get_redis_connection("default")
-                redis_info = redis_client.info()
-                REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
-            except Exception:
-                # Non-Redis backend or connection error
-                REDIS_CONNECTIONS.set(0)
-
+            # Use public django-redis API instead of internal _cache attribute
+            redis_client = get_redis_connection("default")
+            redis_info = redis_client.info()
+            REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
             # Huey queue size (approximation via Redis)
-            try:
-                from django.conf import settings
-
-                redis_client = redis.Redis(connection_pool=settings.HUEY.storage.conn)
-                queue_size = redis_client.llen("huey.default")
-                HUEY_QUEUE_SIZE.set(queue_size)
-            except Exception:
-                pass
-
+            redis_client = redis.Redis(connection_pool=settings.HUEY.storage.conn)
+            queue_size = redis_client.llen("huey.default")
+            HUEY_QUEUE_SIZE.set(queue_size)
         except Exception as e:
+            # django-redis not available or connection error - signal unavailable
+            REDIS_CONNECTIONS.set(0)
             logger.warning(f"Failed to update system metrics: {e}")
 
 
@@ -188,8 +180,6 @@ metrics = MetricsCollector()
 def initialize_metrics():
     """Initialize application metrics."""
     try:
-        from django.conf import settings
-
         # Set application info
         APPLICATION_INFO.info(
             {
@@ -198,7 +188,6 @@ def initialize_metrics():
                 "debug": str(getattr(settings, "DEBUG", False)),
             }
         )
-
         logger.info("Metrics collection initialized successfully")
 
     except Exception as e:
