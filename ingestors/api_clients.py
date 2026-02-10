@@ -219,6 +219,8 @@ class UnifiedHealthDataClient:
             # Try token refresh once
             try:
                 self._refresh_token(social_auth, query.provider)
+                # Refresh from DB to ensure we have the latest token data
+                social_auth.refresh_from_db()
                 # Reset circuit breaker after successful token refresh to allow retry
                 match query.provider:
                     case Provider.WITHINGS:
