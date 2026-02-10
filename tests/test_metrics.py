@@ -114,7 +114,7 @@ class TestMetricsCollector:
 
     def test_update_system_metrics(self, collector):
         """Test updating system metrics doesn't raise errors."""
-        with patch("metrics.collectors.cache"):
+        with patch("django_redis.get_redis_connection"):
             with patch("metrics.collectors.redis"):
                 collector.update_system_metrics()
 
