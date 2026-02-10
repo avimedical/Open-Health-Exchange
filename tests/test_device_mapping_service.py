@@ -257,8 +257,8 @@ class TestBatchCacheLookup:
             assert len(results) == 0
             assert len(uncached) == 2
 
-    def test_batch_cache_lookup_ignores_not_found_marker(self, service):
-        """Test that NOT_FOUND marker is treated as cache miss."""
+    def test_batch_cache_lookup_honors_not_found_marker(self, service):
+        """Test that NOT_FOUND marker is honored as negative cache hit."""
         with patch("ingestors.device_mapping_service.cache") as mock_cache:
             mock_cache.get_many.return_value = {
                 "device_map:withings:device-1": "NOT_FOUND",
@@ -267,8 +267,10 @@ class TestBatchCacheLookup:
             queries = [DeviceQuery(Provider.WITHINGS, "device-1")]
             results, uncached = service._batch_cache_lookup(queries)
 
-            assert len(results) == 0
-            assert len(uncached) == 1
+            # NOT_FOUND should be treated as cache HIT (negative cache)
+            assert len(results) == 1
+            assert results["device-1"] is None
+            assert len(uncached) == 0
 
     def test_batch_cache_lookup_cache_failure(self, service):
         """Test cache failure returns all queries as uncached."""

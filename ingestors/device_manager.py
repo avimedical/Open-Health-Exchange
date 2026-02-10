@@ -70,7 +70,7 @@ class DeviceManager:
     def _get_user_credentials(self, user_id: str) -> OAuthCredentials:
         """Get OAuth credentials for a user"""
         try:
-            auth = UserSocialAuth.objects.get(user__ehr_user_id=user_id, provider=self.provider)
+            auth = UserSocialAuth.objects.get(user__ehr_user_id=user_id, provider=self.provider.value)
             return OAuthCredentials(
                 access_token=auth.extra_data["access_token"],
                 refresh_token=auth.extra_data.get("refresh_token"),

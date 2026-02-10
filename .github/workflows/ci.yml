@@ -94,7 +94,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-for-ci-only
         run: |
-          poetry run pytest tests/ --junitxml=test-results.xml -v
+          poetry run pytest tests/ base/tests/ --junitxml=test-results.xml -v
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

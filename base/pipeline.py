@@ -47,8 +47,14 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
 
             return {"user": target_user}
         except EHRUser.DoesNotExist:
-            logger.error(f"EHR user with ID {ehr_user_id} not found in database")
-            logger.warning(f"EHR user {ehr_user_id} not found, trying other authentication methods")
+            # Session indicates linking flow but user doesn't exist - CRITICAL ERROR
+            error_msg = (
+                f"OAuth linking flow failed for {backend.name}: Session indicates linking to "
+                f"EHR user {ehr_user_id}, but this user does not exist in the database. "
+                f"This may indicate a race condition (user deleted during OAuth) or session corruption."
+            )
+            logger.error(error_msg)
+            raise AuthForbidden(backend, error_msg)
 
     if not user:
         # Method 2: Bearer token from request/session (API-based auth)
@@ -273,21 +279,23 @@ def initialize_provider_services(strategy, details, backend, user, response, *ar
             from ingestors.health_data_tasks import sync_user_health_data_initial
             from ingestors.tasks import ensure_webhook_subscriptions, sync_user_devices
 
-            # Queue device sync (high priority)
-            sync_user_devices(user.ehr_user_id, provider_name)
+            # Queue device sync (high priority) - async to not block OAuth callback
+            sync_user_devices.delay(user_id=user.ehr_user_id, provider_name=provider_name)
 
-            # Queue health data sync (low priority for initial sync)
+            # Queue health data sync (low priority for initial sync) - async
             if effective_data_types:  # Only sync if data types are configured
-                sync_user_health_data_initial(
-                    user.ehr_user_id,
-                    provider_name,
+                sync_user_health_data_initial.delay(
+                    user_id=user.ehr_user_id,
+                    provider_name=provider_name,
                     lookback_days=settings.HEALTH_DATA_CONFIG["LOOKBACK_DAYS"],
                     data_types=effective_data_types,
                 )
 
-            # Queue webhook subscription creation (medium priority, async)
+            # Queue webhook subscription creation (medium priority) - async
             if webhook_enabled and effective_data_types:
-                ensure_webhook_subscriptions(user.ehr_user_id, provider_name, data_types=effective_data_types)
+                ensure_webhook_subscriptions.delay(
+                    user_id=user.ehr_user_id, provider_name=provider_name, data_types=effective_data_types
+                )
                 logger.info(f"Queued webhook subscription creation for user {user.ehr_user_id}")
             else:
                 logger.info(f"Webhooks disabled or no data types configured for {provider_name}")

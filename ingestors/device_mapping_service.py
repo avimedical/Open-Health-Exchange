@@ -112,9 +112,15 @@ class DeviceMappingService:
             for cache_key, query in cache_keys.items():
                 if cached_value := cached_values.get(cache_key):
                     # Type safety - ensure we got a string back
-                    if isinstance(cached_value, str) and cached_value != "NOT_FOUND":
+                    if isinstance(cached_value, str):
+                        if cached_value == "NOT_FOUND":
+                            # Honor negative cache - device not found in FHIR
+                            # TTL ensures this refreshes after NEGATIVE_CACHE_TTL expires
+                            results[query.device_id] = None
+                            logger.debug(f"Cache HIT (negative): {query.device_id} -> None")
+                            continue
                         results[query.device_id] = cached_value
-                        logger.debug(f"Cache HIT: {query.device_id} -> {cached_value}")
+                        logger.debug(f"Cache HIT (positive): {query.device_id} -> {cached_value}")
                         continue
 
                 uncached_queries.append(query)
@@ -181,7 +187,7 @@ class DeviceMappingService:
                 case str() as device_ref:
                     positive_cache[query.cache_key] = device_ref
                 case None:
-                    negative_cache[f"{query.cache_key}:not_found"] = "NOT_FOUND"
+                    negative_cache[query.cache_key] = "NOT_FOUND"
 
         try:
             # Batch cache operations

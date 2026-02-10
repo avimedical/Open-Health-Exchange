@@ -93,20 +93,22 @@ class TestAssociateByTokenUser:
             # Session should NOT be cleared - ProviderLinkSuccessView needs it
             assert mock_strategy.session.get("linking_ehr_user_id") == "ehr-123"
 
-    def test_associate_user_not_found_tries_other_methods(self, mock_strategy, mock_backend):
-        """Test fallback when EHR user not found."""
+    def test_associate_user_not_found_raises_error(self, mock_strategy, mock_backend):
+        """Test that session with non-existent user raises error (prevents wrong user association)."""
         mock_strategy.session["linking_ehr_user_id"] = "nonexistent-user"
 
         with patch("base.models.EHRUser") as mock_ehr_user:
             mock_ehr_user.DoesNotExist = Exception
             mock_ehr_user.objects.get.side_effect = mock_ehr_user.DoesNotExist
 
-            # Set up authenticated request user as fallback
-            mock_strategy.request.user.is_authenticated = True
+            # Should raise AuthForbidden instead of falling back
+            with pytest.raises(AuthForbidden) as exc_info:
+                associate_by_token_user(mock_strategy, {}, mock_backend)
 
-            result = associate_by_token_user(mock_strategy, {}, mock_backend)
-
-            assert result == {"user": mock_strategy.request.user}
+            # Verify error message contains security context (check exception repr, not str)
+            exc_repr = repr(exc_info.value)
+            assert "nonexistent-user" in exc_repr
+            assert "does not exist" in exc_repr
 
     def test_associate_by_authenticated_user(self, mock_strategy, mock_backend):
         """Test association via currently authenticated user."""
@@ -339,10 +341,10 @@ class TestInitializeProviderServices:
                                     mock_strategy, {}, mock_backend, user=mock_user, response={}
                                 )
 
-                                # Verify tasks were queued
-                                mock_sync_devices.assert_called_once()
-                                mock_sync_health.assert_called_once()
-                                mock_webhooks.assert_called_once()
+                                # Verify tasks were queued via .delay()
+                                mock_sync_devices.delay.assert_called_once()
+                                mock_sync_health.delay.assert_called_once()
+                                mock_webhooks.delay.assert_called_once()
 
     def test_initialize_handles_unsupported_provider(self, mock_strategy, mock_backend):
         """Test handling of unsupported provider."""

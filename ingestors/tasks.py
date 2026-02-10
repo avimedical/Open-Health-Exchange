@@ -89,8 +89,28 @@ def test_task() -> str:
 @HUEY.periodic_task(crontab(hour="2", minute="30"), priority=2)  # Nightly sync
 def nightly_device_sync() -> list[dict]:
     """
-    Nightly device synchronization task
-    Runs every night at 2:30 AM
+    Nightly device synchronization task.
+
+    Runs every night at 2:30 AM. Iterates through all active provider links
+    and queues async device sync tasks for each user.
+
+    Returns:
+        list[dict]: Queue metadata for each queued task containing:
+            - task_id (str|None): Huey task ID if available
+            - queued (bool): True if task was queued successfully
+            - link_id (int): Provider link database ID
+            - user_id (str): EHR user ID
+            - provider (str): Provider name (withings, fitbit, etc.)
+
+        Or error dictionaries for failed tasks:
+            - error (str): Error message
+            - success (bool): False
+            - link_id (int): Provider link database ID
+
+    Note:
+        The actual sync results are produced by the async `sync_user_devices` tasks
+        and are not returned here. This return value is primarily for logging/monitoring
+        and is discarded by the Huey scheduler.
     """
     logger.info("Starting nightly device synchronization")
 
@@ -111,9 +131,20 @@ def nightly_device_sync() -> list[dict]:
                 logger.warning(f"No access token found for provider link {link.pk}")
                 continue
 
-            # Queue device sync task
-            result = sync_user_devices(user_id=link.user.ehr_user_id, provider_name=link.provider.provider_type)
-            sync_results.append(result)
+            # Queue device sync task asynchronously
+            task = sync_user_devices.delay(
+                user_id=link.user.ehr_user_id,
+                provider_name=link.provider.provider_type,
+            )
+            sync_results.append(
+                {
+                    "task_id": getattr(task, "id", None),
+                    "queued": True,
+                    "link_id": link.pk,
+                    "user_id": link.user.ehr_user_id,
+                    "provider": link.provider.provider_type,
+                }
+            )
 
             logger.info(f"Queued device sync for user {link.user.ehr_user_id} with {link.provider.provider_type}")
 
