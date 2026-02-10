@@ -6,6 +6,7 @@ import logging
 import time
 
 import redis
+from django_redis import get_redis_connection
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info
 
 logger = logging.getLogger(__name__)
@@ -157,20 +158,14 @@ class MetricsCollector:
     def update_system_metrics(self):
         """Update system health metrics."""
         try:
-            # Redis connections (if available via django-redis backend)
             try:
-                from django_redis import get_redis_connection
-
                 # Use public django-redis API instead of internal _cache attribute
                 redis_client = get_redis_connection("default")
                 redis_info = redis_client.info()
                 REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
-            except ImportError:
-                # django-redis not installed
-                pass
             except Exception:
                 # Non-Redis backend or connection error
-                pass
+                REDIS_CONNECTIONS.set(0)
 
             # Huey queue size (approximation via Redis)
             try:
