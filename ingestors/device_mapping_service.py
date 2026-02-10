@@ -114,12 +114,13 @@ class DeviceMappingService:
                     # Type safety - ensure we got a string back
                     if isinstance(cached_value, str):
                         if cached_value == "NOT_FOUND":
-                            # Treat as cache miss - re-check FHIR in case device was created since
-                            uncached_queries.append(query)
-                            logger.debug(f"Cache MISS (negative expired): {query.device_id}")
+                            # Honor negative cache - device not found in FHIR
+                            # TTL ensures this refreshes after NEGATIVE_CACHE_TTL expires
+                            results[query.device_id] = None
+                            logger.debug(f"Cache HIT (negative): {query.device_id} -> None")
                             continue
                         results[query.device_id] = cached_value
-                        logger.debug(f"Cache HIT: {query.device_id} -> {cached_value}")
+                        logger.debug(f"Cache HIT (positive): {query.device_id} -> {cached_value}")
                         continue
 
                 uncached_queries.append(query)

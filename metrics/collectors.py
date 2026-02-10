@@ -6,7 +6,6 @@ import logging
 import time
 
 import redis
-from django.core.cache import cache
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info
 
 logger = logging.getLogger(__name__)
@@ -160,12 +159,18 @@ class MetricsCollector:
         try:
             # Redis connections (if available via django-redis backend)
             try:
-                # Only attempt if cache backend supports get_client() (e.g., django-redis)
-                if hasattr(cache, "_cache") and hasattr(cache._cache, "get_client"):
-                    redis_info = cache._cache.get_client().info()
-                    REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
+                from django_redis import get_redis_connection
+
+                # Use public django-redis API instead of internal _cache attribute
+                redis_client = get_redis_connection("default")
+                redis_info = redis_client.info()
+                REDIS_CONNECTIONS.set(redis_info.get("connected_clients", 0))
+            except ImportError:
+                # django-redis not installed
+                pass
             except Exception:
-                pass  # Expected for non-Redis backends
+                # Non-Redis backend or connection error
+                pass
 
             # Huey queue size (approximation via Redis)
             try:

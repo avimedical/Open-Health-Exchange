@@ -89,8 +89,28 @@ def test_task() -> str:
 @HUEY.periodic_task(crontab(hour="2", minute="30"), priority=2)  # Nightly sync
 def nightly_device_sync() -> list[dict]:
     """
-    Nightly device synchronization task
-    Runs every night at 2:30 AM
+    Nightly device synchronization task.
+
+    Runs every night at 2:30 AM. Iterates through all active provider links
+    and queues async device sync tasks for each user.
+
+    Returns:
+        list[dict]: Queue metadata for each queued task containing:
+            - task_id (str|None): Huey task ID if available
+            - queued (bool): True if task was queued successfully
+            - link_id (int): Provider link database ID
+            - user_id (str): EHR user ID
+            - provider (str): Provider name (withings, fitbit, etc.)
+
+        Or error dictionaries for failed tasks:
+            - error (str): Error message
+            - success (bool): False
+            - link_id (int): Provider link database ID
+
+    Note:
+        The actual sync results are produced by the async `sync_user_devices` tasks
+        and are not returned here. This return value is primarily for logging/monitoring
+        and is discarded by the Huey scheduler.
     """
     logger.info("Starting nightly device synchronization")
 

@@ -47,8 +47,14 @@ def associate_by_token_user(strategy, details, backend, user=None, *args, **kwar
 
             return {"user": target_user}
         except EHRUser.DoesNotExist:
-            logger.error(f"EHR user with ID {ehr_user_id} not found in database")
-            logger.warning(f"EHR user {ehr_user_id} not found, trying other authentication methods")
+            # Session indicates linking flow but user doesn't exist - CRITICAL ERROR
+            error_msg = (
+                f"OAuth linking flow failed for {backend.name}: Session indicates linking to "
+                f"EHR user {ehr_user_id}, but this user does not exist in the database. "
+                f"This may indicate a race condition (user deleted during OAuth) or session corruption."
+            )
+            logger.error(error_msg)
+            raise AuthForbidden(backend, error_msg)
 
     if not user:
         # Method 2: Bearer token from request/session (API-based auth)
