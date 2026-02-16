@@ -93,6 +93,7 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-for-ci-only
+          SENTRY_RELEASE: ${{ github.sha }}
         run: |
           poetry run pytest tests/ base/tests/ --junitxml=test-results.xml -v
 
@@ -152,3 +153,5 @@ jobs:
           file: ./Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SENTRY_RELEASE=${{ github.sha }}
