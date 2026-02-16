@@ -1,0 +1,26 @@
+/* Simple styling for data type checkbox widget */
+
+.data-type-checkbox-list ul {
+    column-count: 3;
+    column-gap: 20px;
+    margin: 10px 0;
+}
+
+.data-type-checkbox-list li {
+    list-style: none;
+    margin: 8px 0;
+    padding: 0;
+    break-inside: avoid;
+}
+
+.data-type-checkbox-list label {
+    cursor: pointer;
+    padding: 4px 0;
+    display: inline-block;
+}
+
+/* Visual feedback for excluded (checked) items */
+.data-type-checkbox-list input[type="checkbox"]:checked + label {
+    color: #999;
+    text-decoration: line-through;
+}

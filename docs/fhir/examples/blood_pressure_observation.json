@@ -1,0 +1,97 @@
+{
+  "resourceType": "Observation",
+  "id": "withings-blood-pressure-20240924-083015",
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "85354-9",
+        "display": "Blood pressure panel with all children optional"
+      }
+    ],
+    "text": "Blood pressure"
+  },
+  "subject": {
+    "reference": "Patient/9f99f236-82f0-4fc9-a223-cf78330d64e2"
+  },
+  "effectiveDateTime": "2024-09-24T08:30:15Z",
+  "device": {
+    "reference": "Device/withings-bpm-core-98765"
+  },
+  "component": [
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8480-6",
+            "display": "Systolic blood pressure"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": 125,
+        "unit": "mmHg",
+        "system": "http://unitsofmeasure.org",
+        "code": "mm[Hg]"
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8462-4",
+            "display": "Diastolic blood pressure"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": 82,
+        "unit": "mmHg",
+        "system": "http://unitsofmeasure.org",
+        "code": "mm[Hg]"
+      }
+    }
+  ],
+  "identifier": [
+    {
+      "use": "secondary",
+      "system": "https://api.withings.com/health-data",
+      "value": "blood_pressure_2024-09-24T08:30:15_9f99f236-82f0-4fc9-a223-cf78330d64e2"
+    }
+  ],
+  "meta": {
+    "source": "#withings",
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
+        "code": "withings",
+        "display": "Withings"
+      }
+    ]
+  },
+  "note": [
+    {
+      "time": "2024-09-24T14:30:21Z",
+      "text": "Synced from Withings Health Platform. Metadata: {\"pulse\": 65, \"measurement_quality\": \"good\", \"position\": \"sitting\"}"
+    }
+  ]
+}

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Successfully Linked - Open Health Exchange</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .success-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+            padding: 40px 30px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 20px rgba(76, 175, 80, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+
+        .checkmark {
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        .success-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .provider-name {
+            color: #4CAF50;
+            text-transform: capitalize;
+        }
+
+        .success-message {
+            font-size: 16px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .sync-info {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 24px 0;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .sync-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e9ecef;
+            border-top: 2px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .sync-details {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .next-steps {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .next-steps h3 {
+            font-size: 18px;
+            color: #2c3e50;
+            margin-bottom: 16px;
+        }
+
+        .steps-list {
+            text-align: left;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .steps-list li {
+            margin-bottom: 8px;
+            padding-left: 8px;
+        }
+
+        .close-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 24px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .close-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .close-button:active {
+            transform: translateY(0);
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            .success-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .success-title {
+                font-size: 24px;
+            }
+
+            .success-message {
+                font-size: 15px;
+            }
+
+            .sync-info {
+                padding: 16px;
+            }
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            }
+
+            .success-container {
+                background: #34495e;
+                color: #ecf0f1;
+            }
+
+            .success-title {
+                color: #ecf0f1;
+            }
+
+            .sync-info {
+                background: #2c3e50;
+                border-left-color: #4CAF50;
+            }
+
+            .sync-title {
+                color: #ecf0f1;
+            }
+
+            .next-steps h3 {
+                color: #ecf0f1;
+            }
+
+            .next-steps {
+                border-top-color: #506172;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">
+            <div class="checkmark">✓</div>
+        </div>
+
+        <h1 class="success-title">
+            <span class="provider-name">{{ provider|default:"Provider" }}</span> Successfully Linked!
+        </h1>
+
+        <p class="success-message">
+            Great! Your {{ provider|default:"provider" }} account has been successfully connected to your health record.
+            Your devices and health data will now be automatically synchronized.
+        </p>
+
+        <div class="sync-info">
+            <div class="sync-title">
+                <span class="spinner"></span>
+                Device Synchronization Started
+            </div>
+            <div class="sync-details">
+                We're now fetching your devices and health data in the background.
+                This process may take a few minutes to complete. Your healthcare provider
+                will have access to your latest data shortly.
+            </div>
+        </div>
+
+        <div class="next-steps">
+            <h3>What happens next?</h3>
+            <ul class="steps-list">
+                <li>✓ Your {{ provider|default:"provider" }} account is now linked</li>
+                <li>🔄 Device information is being synchronized</li>
+                <li>📊 Health data will be available in your EHR within a few hours</li>
+                <li>🔒 All data transfers are secure and encrypted</li>
+            </ul>
+        </div>
+
+        <button class="close-button" onclick="window.close() || history.back()">
+            Close Window
+        </button>
+    </div>
+
+    <script>
+        // Auto-close after 30 seconds if this is a popup window
+        if (window.opener) {
+            setTimeout(() => {
+                window.close();
+            }, 30000);
+        }
+
+        // Add some interactivity
+        document.querySelector('.close-button').addEventListener('click', () => {
+            // Try to close the window first (if it's a popup)
+            if (window.opener) {
+                window.close();
+            } else {
+                // Otherwise, go back or redirect to a default page
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    // Could redirect to a dashboard or main page
+                    window.location.href = '/';
+                }
+            }
+        });
+
+        // Add smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+    </script>
+</body>
+</html>
