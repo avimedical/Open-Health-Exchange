@@ -9,6 +9,7 @@ import pytest
 
 from ingestors.constants import Provider
 from ingestors.health_data_constants import (
+    FHIR_UNITS,
     DateRange,
     HealthDataType,
     MeasurementSource,
@@ -292,7 +293,7 @@ class TestWithingsHealthDataManager:
         assert len(records) == 1
         assert records[0].data_type == HealthDataType.TEMPERATURE
         assert records[0].value == 36.5
-        assert records[0].unit == "celsius"
+        assert records[0].unit == FHIR_UNITS["temperature"]["display"]
 
     def test_fetch_health_data_spo2(self, manager):
         """Test fetching SpO2 data."""

@@ -20,6 +20,7 @@ from ingestors.health_data_constants import (
     SLEEP_COMPONENT_CODES,
     HealthDataRecord,
     HealthDataType,
+    _create_fhir_timestamp,
 )
 
 from .base_fhir_transformer import BaseFHIRTransformer
@@ -27,15 +28,6 @@ from .ecg_transformers import ECGTransformer
 from .identifier_utils import generate_resource_uuid
 
 logger = logging.getLogger(__name__)
-
-
-def _create_fhir_timestamp(dt=None) -> str:
-    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
-    from datetime import UTC
-
-    timestamp = dt or timezone.now()
-    utc_timestamp = timestamp.astimezone(UTC)
-    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class HealthDataTransformer(BaseFHIRTransformer):

@@ -109,11 +109,6 @@ def run_test_with_django(test_function, test_name: str | None = None, log_level:
         metrics.finish(success)
         metrics.summary()
 
-        if success:
-            pass
-        else:
-            pass
-
         return success
 
     except Exception:

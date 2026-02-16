@@ -7,11 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ingestors.health_data_constants import HealthDataRecord, HealthDataType, Provider
+from ingestors.health_data_constants import HealthDataRecord, HealthDataType, Provider, _create_fhir_timestamp
 from transformers.health_data_transformers import (
     HealthDataBundle,
     HealthDataTransformer,
-    _create_fhir_timestamp,
     create_health_data_bundle,
     transform_health_record,
     transform_multiple_health_records,

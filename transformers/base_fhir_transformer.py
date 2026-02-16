@@ -5,10 +5,8 @@ Provides common FHIR structure creation methods and validation patterns
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
-
-from django.utils import timezone
 
 from ingestors.constants import Provider
 from ingestors.health_data_constants import MeasurementSource
@@ -153,11 +151,9 @@ class BaseFHIRTransformer(ABC):
         Ensures consistent ISO format with Z suffix for UTC times.
         FHIR requires either Z suffix OR timezone offset, not both.
         """
-        timestamp = dt or timezone.now()
-        # Convert to UTC and format with Z suffix (not +00:00Z which is invalid)
-        utc_timestamp = timestamp.astimezone(UTC)
-        # Use strftime to avoid the +00:00 offset that isoformat() adds
-        return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        from ingestors.health_data_constants import _create_fhir_timestamp
+
+        return _create_fhir_timestamp(dt)
 
     def log_transformation(self, resource_type: str, identifier: str):
         """
