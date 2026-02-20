@@ -341,10 +341,10 @@ class TestInitializeProviderServices:
                                     mock_strategy, {}, mock_backend, user=mock_user, response={}
                                 )
 
-                                # Verify tasks were queued via .delay()
-                                mock_sync_devices.delay.assert_called_once()
-                                mock_sync_health.delay.assert_called_once()
-                                mock_webhooks.delay.assert_called_once()
+                                # Verify tasks were queued (Huey queues tasks by direct call)
+                                mock_sync_devices.assert_called_once()
+                                mock_sync_health.assert_called_once()
+                                mock_webhooks.assert_called_once()
 
     def test_initialize_handles_unsupported_provider(self, mock_strategy, mock_backend):
         """Test handling of unsupported provider."""
