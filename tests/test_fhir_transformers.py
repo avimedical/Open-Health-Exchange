@@ -142,7 +142,7 @@ class TestDeviceTransformer:
         """Test device note creation"""
         from datetime import UTC
 
-        with patch("transformers.base_fhir_transformer.timezone") as mock_tz:
+        with patch("ingestors.health_data_constants.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
 
             result = device_transformer.transform(sample_device)
@@ -240,7 +240,7 @@ class TestDeviceAssociationTransformer:
 
         patient_ref = "Patient/test-patient-123"
 
-        with patch("transformers.base_fhir_transformer.timezone") as mock_tz:
+        with patch("ingestors.health_data_constants.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
 
             result = association_transformer.transform(sample_device, patient_ref, "Device/456")
@@ -263,7 +263,7 @@ class TestDeviceAssociationTransformer:
         """Test association period"""
         from datetime import UTC
 
-        with patch("transformers.base_fhir_transformer.timezone") as mock_tz:
+        with patch("ingestors.health_data_constants.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
 
             result = association_transformer.transform(sample_device, "Patient/123", "Device/456")

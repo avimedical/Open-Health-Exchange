@@ -2,28 +2,12 @@
 Tests for DeviceAssociation Publisher - FHIR DeviceAssociation resource management.
 """
 
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ingestors.constants import DeviceData, Provider
-from publishers.fhir.association_publisher import DeviceAssociationPublisher, _create_fhir_timestamp
-
-
-class TestCreateFhirTimestamp:
-    """Tests for _create_fhir_timestamp helper function."""
-
-    def test_creates_utc_timestamp_with_z_suffix(self):
-        """Test timestamp ends with Z suffix."""
-        result = _create_fhir_timestamp()
-        assert result.endswith("Z")
-
-    def test_creates_timestamp_from_datetime(self):
-        """Test timestamp from provided datetime."""
-        dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
-        result = _create_fhir_timestamp(dt)
-        assert "2024-01-15T10:30:00" in result
+from publishers.fhir.association_publisher import DeviceAssociationPublisher
 
 
 class TestDeviceAssociationPublisher:

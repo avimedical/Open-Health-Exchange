@@ -215,7 +215,7 @@ class UnifiedWebhookHandler:
 
         for sync_request in sync_requests:
             try:
-                task_result = sync_user_health_data_realtime.delay(
+                task_result = sync_user_health_data_realtime(
                     user_id=sync_request["user_id"],
                     provider_name=sync_request["provider"],
                     data_types=sync_request["data_types"],

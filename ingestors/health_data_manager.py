@@ -13,7 +13,14 @@ from social_django.models import UserSocialAuth
 # Real API clients for Phase 2
 from .api_clients import APIError, get_unified_health_data_client
 from .constants import Provider
-from .health_data_constants import DateRange, HealthDataRecord, HealthDataType, MeasurementSource, SyncTrigger
+from .health_data_constants import (
+    FHIR_UNITS,
+    DateRange,
+    HealthDataRecord,
+    HealthDataType,
+    MeasurementSource,
+    SyncTrigger,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -159,7 +166,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.HEART_RATE,
                         timestamp=measurement["timestamp"],
                         value=float(measurement["value"]),
-                        unit="bpm",
+                        unit=FHIR_UNITS["heart_rate"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -178,7 +185,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                             data_type=HealthDataType.STEPS,
                             timestamp=activity["date"],
                             value=float(activity["steps"]),
-                            unit="steps",
+                            unit=FHIR_UNITS["steps"]["display"],
                             device_id=activity.get("device_id"),
                             metadata={
                                 "source": "withings_api",
@@ -196,7 +203,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.WEIGHT,
                         timestamp=measurement["timestamp"],
                         value=float(measurement["value"]),
-                        unit="kg",
+                        unit=FHIR_UNITS["weight"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -214,7 +221,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.BLOOD_PRESSURE,
                         timestamp=measurement["timestamp"],
                         value=float(measurement["value"]),
-                        unit="mmHg",
+                        unit=FHIR_UNITS["blood_pressure"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -237,7 +244,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                             "afib_result": measurement.get("afib_result"),
                             "afib_classification": measurement.get("afib_classification"),
                         },
-                        unit="uV",
+                        unit="uV",  # ECG waveform voltage - no FHIR_UNITS mapping needed
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -259,7 +266,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.TEMPERATURE,
                         timestamp=measurement["timestamp"],
                         value=float(measurement["value"]),
-                        unit="celsius",
+                        unit=FHIR_UNITS["temperature"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -277,7 +284,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.SPO2,
                         timestamp=measurement["timestamp"],
                         value=float(measurement["value"]),
-                        unit="%",
+                        unit=FHIR_UNITS["spo2"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
@@ -396,7 +403,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.HEART_RATE,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),
-                        unit="bpm",
+                        unit=FHIR_UNITS["heart_rate"]["display"],
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
@@ -414,7 +421,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                             data_type=HealthDataType.STEPS,
                             timestamp=data_point["date"],
                             value=float(data_point["steps"]),
-                            unit="steps",
+                            unit=FHIR_UNITS["steps"]["display"],
                             device_id=data_point.get("device_id"),
                             metadata={"source": "fitbit_api"},
                             measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
@@ -428,7 +435,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.WEIGHT,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),
-                        unit="kg",
+                        unit=FHIR_UNITS["weight"]["display"],
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
@@ -447,7 +454,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.SLEEP,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),  # minutes asleep
-                        unit=data_point.get("unit", "minutes"),
+                        unit=data_point.get("unit", FHIR_UNITS["time_min"]["display"]),
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",
@@ -488,7 +495,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.RR_INTERVALS,
                         timestamp=data_point["timestamp"],
                         value=float(data_point["value"]),  # RMSSD value
-                        unit=data_point.get("unit", "ms"),
+                        unit=data_point.get("unit", FHIR_UNITS["time_ms"]["display"]),
                         device_id=data_point.get("device_id"),
                         metadata={
                             "source": "fitbit_api",

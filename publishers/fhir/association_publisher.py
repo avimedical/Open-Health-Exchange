@@ -10,20 +10,12 @@ from django.utils import dateparse
 from django.utils import timezone as django_timezone
 
 from ingestors.constants import DeviceData
+from ingestors.health_data_constants import _create_fhir_timestamp
 from transformers.fhir_transformers import DeviceAssociationTransformer
 
 from .client import FHIRClient
 
 logger = logging.getLogger(__name__)
-
-
-def _create_fhir_timestamp(dt=None) -> str:
-    """Create a FHIR-compliant timestamp with Z suffix for UTC times."""
-    from datetime import UTC
-
-    timestamp = dt or django_timezone.now()
-    utc_timestamp = timestamp.astimezone(UTC)
-    return utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class DeviceAssociationPublisher:

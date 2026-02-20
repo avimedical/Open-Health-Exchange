@@ -132,7 +132,7 @@ def nightly_device_sync() -> list[dict]:
                 continue
 
             # Queue device sync task asynchronously
-            task = sync_user_devices.delay(
+            task = sync_user_devices(
                 user_id=link.user.ehr_user_id,
                 provider_name=link.provider.provider_type,
             )
