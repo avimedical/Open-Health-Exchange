@@ -309,7 +309,7 @@ def nightly_health_data_sync() -> list[dict]:
                 continue
 
             # Queue incremental health data sync
-            result = sync_user_health_data_incremental.delay(
+            result = sync_user_health_data_incremental(
                 user_id=link.user.ehr_user_id,
                 provider_name=link.provider.provider_type,
                 data_types=["heart_rate", "steps"],  # Default types for Phase 1

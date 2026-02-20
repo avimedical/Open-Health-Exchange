@@ -297,7 +297,7 @@ class TestHandleNotificationRequest:
         )
 
         with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime") as mock_task:
-            mock_task.delay.return_value = MagicMock(id="task-123")
+            mock_task.return_value = MagicMock(id="task-123")
 
             response = handler._handle_notification_request(Provider.WITHINGS, request)
 
@@ -315,7 +315,7 @@ class TestHandleNotificationRequest:
         )
 
         with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime") as mock_task:
-            mock_task.delay.return_value = MagicMock(id="task-456")
+            mock_task.return_value = MagicMock(id="task-456")
 
             response = handler._handle_notification_request(Provider.FITBIT, request)
 
@@ -502,7 +502,7 @@ class TestQueueSyncTasks:
         sync_requests = [{"user_id": "test-user", "provider": "withings", "data_types": ["heart_rate"]}]
 
         with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime") as mock_task:
-            mock_task.delay.return_value = MagicMock(id="task-123")
+            mock_task.return_value = MagicMock(id="task-123")
 
             result = handler._queue_sync_tasks(Provider.WITHINGS, sync_requests)
 
@@ -518,7 +518,7 @@ class TestQueueSyncTasks:
         ]
 
         with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime") as mock_task:
-            mock_task.delay.side_effect = [MagicMock(id="task-1"), MagicMock(id="task-2")]
+            mock_task.side_effect = [MagicMock(id="task-1"), MagicMock(id="task-2")]
 
             result = handler._queue_sync_tasks(Provider.WITHINGS, sync_requests)
 
@@ -531,7 +531,7 @@ class TestQueueSyncTasks:
         sync_requests = [{"user_id": "test-user", "provider": "withings", "data_types": ["heart_rate"]}]
 
         with patch("webhooks.unified_webhook_handler.sync_user_health_data_realtime") as mock_task:
-            mock_task.delay.side_effect = Exception("Queue error")
+            mock_task.side_effect = Exception("Queue error")
 
             result = handler._queue_sync_tasks(Provider.WITHINGS, sync_requests)
 
