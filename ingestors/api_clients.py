@@ -235,7 +235,8 @@ class UnifiedHealthDataClient:
                         return cast(list[dict[str, Any]], self._fetch_fitbit_data(query, social_auth))
                     case _:
                         raise APIError(f"Unsupported provider: {query.provider}")
-            except TokenExpiredError as e:
+            except (TokenExpiredError, APIError) as e:
+                # TokenExpiredError = transient refresh failure, APIError = permanent failure (no refresh_token)
                 raise APIError(f"Authentication failed for {query.provider.value}: {e}")
 
     @withings_circuit_breaker
@@ -247,17 +248,61 @@ class UnifiedHealthDataClient:
         # Get endpoint and parameters based on data type
         endpoint_info = self._get_withings_endpoint_info(query.data_type)
         endpoint = endpoint_info["endpoint"]
-        params = endpoint_info["params"]
+        params = endpoint_info["params"].copy()
 
         # Add date range to parameters
         params.update(
             {"startdate": int(query.date_range.start.timestamp()), "enddate": int(query.date_range.end.timestamp())}
         )
 
-        # Make authenticated request
         url = f"{endpoints['base_url']}{endpoint}"
         headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/x-www-form-urlencoded"}
 
+        # Check if we need to make multiple calls for different meastypes
+        # (Withings deprecated multi-meastype requests like "meastype=9,10")
+        meastype_list = params.pop("meastype_list", None)
+        if meastype_list:
+            # Make separate API calls for each meastype and merge results by grpid
+            # Blood pressure has same grpid for systolic/diastolic, so we need to merge measures
+            measuregrps_by_id = {}
+
+            for meastype in meastype_list:
+                call_params = params.copy()
+                call_params["meastype"] = meastype
+
+                self.logger.debug(f"Fetching Withings {query.data_type.value} with meastype={meastype}")
+                response = self.session.post(url, data=call_params, headers=headers)
+                response.raise_for_status()
+
+                data = response.json()
+
+                if data.get("status") != 0:
+                    error_msg = data.get("error", "Unknown API error")
+                    error_lower = error_msg.lower()
+                    if (
+                        "invalid_token" in error_lower
+                        or "unauthorized" in error_lower
+                        or "invalid session" in error_lower
+                    ):
+                        raise TokenExpiredError(f"Token expired: {error_msg}")
+                    raise APIError(f"Withings API error: {error_msg}")
+
+                # Merge measuregrps by grpid (same reading can have multiple measures)
+                measuregrps = data.get("body", {}).get("measuregrps", [])
+                for grp in measuregrps:
+                    grpid = grp.get("grpid")
+                    if grpid in measuregrps_by_id:
+                        # Merge measures from this meastype into existing group
+                        measuregrps_by_id[grpid]["measures"].extend(grp.get("measures", []))
+                    else:
+                        # New group
+                        measuregrps_by_id[grpid] = grp
+
+            # Create merged response with all unique measuregrps
+            merged_data = {"status": 0, "body": {"measuregrps": list(measuregrps_by_id.values())}}
+            return self._process_withings_response(merged_data, query.data_type)
+
+        # Single meastype or no meastype - make single API call
         response = self.session.post(url, data=params, headers=headers)
         response.raise_for_status()
 
@@ -338,10 +383,13 @@ class UnifiedHealthDataClient:
             params["action"] = config.api_action
 
         # Add meastype if specified (for /v2/measure endpoint)
+        # Note: Withings deprecated multi-meastype requests (e.g., "meastype=9,10")
+        # For blood pressure, we need to make separate calls for systolic and diastolic
         if config.meastype is not None:
             if isinstance(config.meastype, list):
-                # Multiple meastypes (e.g., blood pressure: systolic + diastolic)
-                params["meastype"] = ",".join(str(mt) for mt in config.meastype)
+                # Store list of meastypes to handle separately
+                # Will make multiple API calls and merge results
+                params["meastype_list"] = config.meastype
             else:
                 # Single meastype
                 params["meastype"] = config.meastype
@@ -962,7 +1010,17 @@ class UnifiedHealthDataClient:
         """Refresh Withings OAuth2 token"""
         refresh_token = social_auth.extra_data.get("refresh_token")
         if not refresh_token:
-            raise TokenExpiredError("No refresh token available")
+            # Log critical error - user must re-authenticate via OAuth
+            self.logger.error(
+                f"CRITICAL: User {social_auth.user.ehr_user_id} has no refresh_token for Withings. "
+                f"User must re-authenticate through OAuth flow. "
+                f"Preventing infinite retry loop by raising unrecoverable error."
+            )
+            # Raise APIError (not TokenExpiredError) to prevent retry loop
+            raise APIError(
+                f"Refresh token missing for user {social_auth.user.ehr_user_id}. "
+                f"User must reconnect their Withings account via OAuth."
+            )
 
         base_url = self.config["ENDPOINTS"]["withings"]["base_url"]
         token_url = base_url.rstrip("/") + "/v2/oauth2"
@@ -979,7 +1037,15 @@ class UnifiedHealthDataClient:
         token_data = response.json()
 
         if token_data.get("status") != 0:
-            raise TokenExpiredError(f"Token refresh failed: {token_data.get('error', 'Unknown error')}")
+            error = token_data.get("error", "Unknown error")
+            # Check if it's an unrecoverable error (invalid refresh token)
+            if "invalid" in error.lower() or "expired" in error.lower():
+                self.logger.error(
+                    f"CRITICAL: Refresh token invalid/expired for user {social_auth.user.ehr_user_id}. "
+                    f"User must re-authenticate. Error: {error}"
+                )
+                raise APIError(f"Refresh token invalid - user must reconnect: {error}")
+            raise TokenExpiredError(f"Token refresh failed: {error}")
 
         body = token_data.get("body", {})
         social_auth.extra_data.update(
@@ -1002,28 +1068,50 @@ class UnifiedHealthDataClient:
 
         refresh_token = social_auth.extra_data.get("refresh_token")
         if not refresh_token:
-            raise TokenExpiredError("No refresh token available")
+            # Log critical error - user must re-authenticate via OAuth
+            self.logger.error(
+                f"CRITICAL: User {social_auth.user.ehr_user_id} has no refresh_token for Fitbit. "
+                f"User must re-authenticate through OAuth flow. "
+                f"Preventing infinite retry loop by raising unrecoverable error."
+            )
+            # Raise APIError (not TokenExpiredError) to prevent retry loop
+            raise APIError(
+                f"Refresh token missing for user {social_auth.user.ehr_user_id}. "
+                f"User must reconnect their Fitbit account via OAuth."
+            )
 
-        client = fitbit.Fitbit(
-            client_id=settings.SOCIAL_AUTH_FITBIT_KEY,
-            client_secret=settings.SOCIAL_AUTH_FITBIT_SECRET,
-            refresh_token=refresh_token,
-        )
+        try:
+            client = fitbit.Fitbit(
+                client_id=settings.SOCIAL_AUTH_FITBIT_KEY,
+                client_secret=settings.SOCIAL_AUTH_FITBIT_SECRET,
+                refresh_token=refresh_token,
+            )
 
-        new_tokens = client.client.refresh_token()
+            new_tokens = client.client.refresh_token()
 
-        social_auth.extra_data.update(
-            {
-                "access_token": new_tokens["access_token"],
-                "refresh_token": new_tokens.get("refresh_token", refresh_token),
-                "expires_in": new_tokens.get("expires_in"),
-                "token_type": new_tokens.get("token_type", "Bearer"),
-            }
-        )
-        social_auth.save()
+            social_auth.extra_data.update(
+                {
+                    "access_token": new_tokens["access_token"],
+                    "refresh_token": new_tokens.get("refresh_token", refresh_token),
+                    "expires_in": new_tokens.get("expires_in"),
+                    "token_type": new_tokens.get("token_type", "Bearer"),
+                }
+            )
+            social_auth.save()
 
-        self.logger.info(f"Successfully refreshed Fitbit token for user {social_auth.user.ehr_user_id}")
-        return True
+            self.logger.info(f"Successfully refreshed Fitbit token for user {social_auth.user.ehr_user_id}")
+            return True
+        except Exception as e:
+            # Check if it's an unrecoverable error
+            error_str = str(e).lower()
+            if "invalid" in error_str or "revoked" in error_str or "expired" in error_str:
+                self.logger.error(
+                    f"CRITICAL: Refresh token invalid/revoked for user {social_auth.user.ehr_user_id}. "
+                    f"User must re-authenticate. Error: {e}"
+                )
+                raise APIError(f"Refresh token invalid - user must reconnect: {e}")
+            # Other errors might be transient, re-raise as TokenExpiredError
+            raise TokenExpiredError(f"Token refresh failed: {e}")
 
     def get_client_stats(self) -> dict[str, Any]:
         """Get client configuration and status"""
