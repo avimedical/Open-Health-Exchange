@@ -464,7 +464,7 @@ class TestTokenManagement:
 
     @responses.activate
     def test_refresh_withings_token_failure(self, client, mock_settings):
-        """Test Withings token refresh failure."""
+        """Test Withings token refresh failure with invalid token raises APIError (unrecoverable)."""
         responses.add(
             responses.POST,
             "https://wbsapi.withings.net/v2/oauth2",
@@ -474,18 +474,18 @@ class TestTokenManagement:
         mock_social_auth = MagicMock()
         mock_social_auth.extra_data = {"refresh_token": "invalid_token"}
 
-        with pytest.raises(TokenExpiredError):
+        with pytest.raises(APIError):
             client._refresh_withings_token(mock_social_auth)
 
     def test_refresh_withings_token_no_refresh_token(self, client):
-        """Test error when no refresh token available."""
+        """Test error when no refresh token available raises APIError (unrecoverable)."""
         mock_social_auth = MagicMock()
         mock_social_auth.extra_data = {}
 
-        with pytest.raises(TokenExpiredError) as exc_info:
+        with pytest.raises(APIError) as exc_info:
             client._refresh_withings_token(mock_social_auth)
 
-        assert "No refresh token" in str(exc_info.value)
+        assert "Refresh token missing" in str(exc_info.value)
 
 
 class TestRateLimiting:

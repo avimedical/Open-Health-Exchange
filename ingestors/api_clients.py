@@ -1002,6 +1002,8 @@ class UnifiedHealthDataClient:
                 case _:
                     raise APIError(f"Token refresh not supported for {provider}")
 
+        except APIError:
+            raise  # Permanent failure (missing/invalid refresh token) — already logged at raise site
         except Exception as e:
             self.logger.error(f"Failed to refresh {provider.value} token: {e}")
             raise TokenExpiredError(f"Token refresh failed: {e}")
