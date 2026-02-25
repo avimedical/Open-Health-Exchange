@@ -528,17 +528,18 @@ class TestRateLimiting:
 
     def test_rate_limit_tracking(self, client):
         """Test that requests are tracked per provider+user pair."""
-        client._check_rate_limit(Provider.WITHINGS, "user-1")
-        client._check_rate_limit(Provider.WITHINGS, "user-1")
+        client._check_rate_limit(Provider.FITBIT, "user-1")
+        client._check_rate_limit(Provider.FITBIT, "user-1")
 
-        assert len(client._request_times["withings:user-1"]) == 2
+        assert len(client._request_times["fitbit:user-1"]) == 2
 
     def test_rate_limit_different_providers_independent(self, client):
-        """Test rate limits are tracked independently per provider+user."""
+        """Test rate limits are tracked independently per provider."""
         client._check_rate_limit(Provider.WITHINGS, "user-1")
         client._check_rate_limit(Provider.FITBIT, "user-1")
 
-        assert len(client._request_times["withings:user-1"]) == 1
+        # Withings uses application-level key (no user suffix)
+        assert len(client._request_times["withings"]) == 1
         assert len(client._request_times["fitbit:user-1"]) == 1
 
     def test_rate_limit_different_users_independent(self, client):
@@ -610,7 +611,8 @@ class TestPerProviderRateLimiting:
         for _ in range(5):
             client._check_rate_limit(Provider.WITHINGS, "user-1")
 
-        assert len(client._request_times["withings:user-1"]) == 5
+        # Withings uses application-level key (no user suffix)
+        assert len(client._request_times["withings"]) == 5
 
     def test_fitbit_limit_lower_than_global(self, client):
         """Test that Fitbit's per-provider limit (3) is enforced independently of global (10)."""
@@ -622,7 +624,8 @@ class TestPerProviderRateLimiting:
             client._check_rate_limit(Provider.WITHINGS, "user-1")
 
         assert len(client._request_times["fitbit:user-1"]) == 3
-        assert len(client._request_times["withings:user-1"]) == 5
+        # Withings uses application-level key
+        assert len(client._request_times["withings"]) == 5
 
 
 class TestWithingsResponseProcessing:
@@ -1427,3 +1430,390 @@ class TestExceptionTypes:
         error = RateLimitError("Rate limit exceeded")
         assert str(error) == "Rate limit exceeded"
         assert isinstance(error, APIError)
+
+
+class TestWithingsApplicationLevelRateLimit:
+    """Tests for Withings application-level rate limiting."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock settings with Withings per-provider rate limits."""
+        with patch("ingestors.api_clients.settings") as mock:
+            mock.API_CLIENT_CONFIG = {
+                "MAX_RETRIES": 3,
+                "BACKOFF_FACTOR": 0.5,
+                "TIMEOUT": 30,
+                "RATE_LIMIT_WINDOW": 60,
+                "MAX_REQUESTS_PER_WINDOW": 300,
+                "PROVIDER_RATE_LIMITS": {
+                    "withings": {
+                        "RATE_LIMIT_WINDOW": 1,
+                        "MAX_REQUESTS_PER_WINDOW": 3,
+                    },
+                },
+                "ENDPOINTS": {
+                    "withings": {"base_url": "https://wbsapi.withings.net"},
+                    "fitbit": {
+                        "base_url": "https://api.fitbit.com",
+                        "source_mapping": {},
+                        "logtype_mapping": {},
+                    },
+                },
+            }
+            mock.CIRCUIT_BREAKER_CONFIG = {
+                "FAILURE_THRESHOLD": 5,
+                "SUCCESS_THRESHOLD": 3,
+                "PROVIDER_TIMEOUT": 60,
+                "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
+            }
+            yield mock
+
+    @pytest.fixture
+    def client(self, mock_settings):
+        """Create client instance."""
+        import ingestors.api_clients
+
+        ingestors.api_clients._unified_client = None
+        return UnifiedHealthDataClient()
+
+    def test_withings_uses_application_level_key(self, client):
+        """Test that Withings rate limit tracks at application level, not per-user."""
+        client._check_rate_limit(Provider.WITHINGS, "user-1")
+        client._check_rate_limit(Provider.WITHINGS, "user-2")
+
+        # Both users share the same application-level key
+        assert len(client._request_times["withings"]) == 2
+        assert "withings:user-1" not in client._request_times
+        assert "withings:user-2" not in client._request_times
+
+    def test_withings_app_level_limit_shared_across_users(self, client):
+        """Test that Withings rate limit is shared across all users."""
+        # Limit is 3 requests — split across two users
+        client._check_rate_limit(Provider.WITHINGS, "user-1")
+        client._check_rate_limit(Provider.WITHINGS, "user-2")
+        client._check_rate_limit(Provider.WITHINGS, "user-3")
+
+        assert len(client._request_times["withings"]) == 3
+
+
+class TestPaginationTruncationWarning:
+    """Tests for pagination max_pages exhaustion warning."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock Django settings."""
+        with patch("ingestors.api_clients.settings") as mock:
+            mock.API_CLIENT_CONFIG = {
+                "MAX_RETRIES": 3,
+                "BACKOFF_FACTOR": 0.5,
+                "TIMEOUT": 30,
+                "RATE_LIMIT_WINDOW": 60,
+                "MAX_REQUESTS_PER_WINDOW": 100,
+                "ENDPOINTS": {
+                    "withings": {"base_url": "https://wbsapi.withings.net"},
+                    "fitbit": {
+                        "base_url": "https://api.fitbit.com",
+                        "source_mapping": {},
+                        "logtype_mapping": {},
+                    },
+                },
+            }
+            mock.CIRCUIT_BREAKER_CONFIG = {
+                "FAILURE_THRESHOLD": 5,
+                "SUCCESS_THRESHOLD": 3,
+                "PROVIDER_TIMEOUT": 60,
+                "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
+            }
+            yield mock
+
+    @pytest.fixture
+    def client(self, mock_settings):
+        """Create client instance."""
+        import ingestors.api_clients
+
+        ingestors.api_clients._unified_client = None
+        return UnifiedHealthDataClient()
+
+    @responses.activate
+    def test_warns_when_max_pages_exhausted(self, client):
+        """Test that a warning is logged when max_pages is reached with more data available."""
+        # All 2 pages return more=1 (more data available)
+        for _ in range(2):
+            responses.add(
+                responses.POST,
+                "https://wbsapi.withings.net/measure",
+                json={
+                    "status": 0,
+                    "body": {
+                        "more": 1,
+                        "offset": 100,
+                        "measuregrps": [{"grpid": 1, "measures": []}],
+                    },
+                },
+            )
+
+        with patch.object(client, "logger") as mock_logger:
+            client._withings_paginated_request(
+                "https://wbsapi.withings.net/measure",
+                {"action": "getmeas"},
+                {"Authorization": "Bearer test"},
+                max_pages=2,
+            )
+
+            mock_logger.warning.assert_called_once()
+            warning_msg = mock_logger.warning.call_args[0][0]
+            assert "pagination limit reached" in warning_msg
+            assert "2 pages" in warning_msg
+
+    @responses.activate
+    def test_no_warning_when_data_fully_fetched(self, client):
+        """Test that no warning is logged when all data is fetched within max_pages."""
+        # Page 1: more data
+        responses.add(
+            responses.POST,
+            "https://wbsapi.withings.net/measure",
+            json={
+                "status": 0,
+                "body": {
+                    "more": 1,
+                    "offset": 100,
+                    "measuregrps": [{"grpid": 1, "measures": []}],
+                },
+            },
+        )
+        # Page 2: no more data
+        responses.add(
+            responses.POST,
+            "https://wbsapi.withings.net/measure",
+            json={
+                "status": 0,
+                "body": {
+                    "more": 0,
+                    "offset": 0,
+                    "measuregrps": [{"grpid": 2, "measures": []}],
+                },
+            },
+        )
+
+        with patch.object(client, "logger") as mock_logger:
+            client._withings_paginated_request(
+                "https://wbsapi.withings.net/measure",
+                {"action": "getmeas"},
+                {"Authorization": "Bearer test"},
+                max_pages=5,
+            )
+
+            mock_logger.warning.assert_not_called()
+
+
+class TestFitbitHeartRateZones:
+    """Tests for Fitbit heart rate zone data extraction."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock Django settings."""
+        with patch("ingestors.api_clients.settings") as mock:
+            mock.API_CLIENT_CONFIG = {
+                "MAX_RETRIES": 3,
+                "BACKOFF_FACTOR": 0.5,
+                "TIMEOUT": 30,
+                "RATE_LIMIT_WINDOW": 60,
+                "MAX_REQUESTS_PER_WINDOW": 100,
+                "ENDPOINTS": {
+                    "withings": {"base_url": "https://wbsapi.withings.net"},
+                    "fitbit": {
+                        "base_url": "https://api.fitbit.com",
+                        "source_mapping": {"Charge 5": "tracker"},
+                        "logtype_mapping": {},
+                    },
+                },
+            }
+            mock.CIRCUIT_BREAKER_CONFIG = {
+                "FAILURE_THRESHOLD": 5,
+                "SUCCESS_THRESHOLD": 3,
+                "PROVIDER_TIMEOUT": 60,
+                "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
+            }
+            yield mock
+
+    @pytest.fixture
+    def client(self, mock_settings):
+        """Create client instance."""
+        import ingestors.api_clients
+
+        ingestors.api_clients._unified_client = None
+        return UnifiedHealthDataClient()
+
+    def test_extracts_heart_rate_zones(self, client):
+        """Test that heart rate zone data is extracted from Fitbit response."""
+        mock_fitbit_client = MagicMock()
+        mock_fitbit_client.time_series.return_value = {
+            "activities-heart": [
+                {
+                    "dateTime": "2025-02-25",
+                    "value": {
+                        "restingHeartRate": 68,
+                        "heartRateZones": [
+                            {"name": "Out of Range", "min": 30, "max": 97, "minutes": 1200, "caloriesOut": 1500.5},
+                            {"name": "Fat Burn", "min": 97, "max": 132, "minutes": 30, "caloriesOut": 200.0},
+                            {"name": "Cardio", "min": 132, "max": 163, "minutes": 10, "caloriesOut": 100.0},
+                            {"name": "Peak", "min": 163, "max": 220, "minutes": 5, "caloriesOut": 50.0},
+                        ],
+                    },
+                }
+            ]
+        }
+
+        query = DataQuery(
+            provider=Provider.FITBIT,
+            data_type=HealthDataType.HEART_RATE,
+            user_id="test-user",
+            date_range=DateRange(
+                start=datetime(2025, 2, 25, tzinfo=UTC),
+                end=datetime(2025, 2, 26, tzinfo=UTC),
+            ),
+        )
+
+        results = client._fetch_fitbit_heart_rate(mock_fitbit_client, query, {})
+
+        assert len(results) == 1
+        assert results[0]["value"] == 68.0
+        assert results[0]["heart_rate_type"] == "resting"
+        assert results[0]["heart_rate_zones"] is not None
+        assert len(results[0]["heart_rate_zones"]) == 4
+
+        cardio_zone = next(z for z in results[0]["heart_rate_zones"] if z["name"] == "Cardio")
+        assert cardio_zone["min"] == 132
+        assert cardio_zone["max"] == 163
+        assert cardio_zone["minutes"] == 10
+        assert cardio_zone["calories_out"] == 100.0
+
+    def test_handles_missing_zones(self, client):
+        """Test that missing heartRateZones results in None."""
+        mock_fitbit_client = MagicMock()
+        mock_fitbit_client.time_series.return_value = {
+            "activities-heart": [
+                {
+                    "dateTime": "2025-02-25",
+                    "value": {"restingHeartRate": 72},
+                }
+            ]
+        }
+
+        query = DataQuery(
+            provider=Provider.FITBIT,
+            data_type=HealthDataType.HEART_RATE,
+            user_id="test-user",
+            date_range=DateRange(
+                start=datetime(2025, 2, 25, tzinfo=UTC),
+                end=datetime(2025, 2, 26, tzinfo=UTC),
+            ),
+        )
+
+        results = client._fetch_fitbit_heart_rate(mock_fitbit_client, query, {})
+
+        assert len(results) == 1
+        assert results[0]["heart_rate_zones"] is None
+
+
+class TestFitbitServerRateLimitHeaders:
+    """Tests for Fitbit server-reported rate limit header handling."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock settings with Fitbit rate limits."""
+        with patch("ingestors.api_clients.settings") as mock:
+            mock.API_CLIENT_CONFIG = {
+                "MAX_RETRIES": 3,
+                "BACKOFF_FACTOR": 0.5,
+                "TIMEOUT": 30,
+                "RATE_LIMIT_WINDOW": 60,
+                "MAX_REQUESTS_PER_WINDOW": 300,
+                "PROVIDER_RATE_LIMITS": {
+                    "fitbit": {
+                        "RATE_LIMIT_WINDOW": 3600,
+                        "MAX_REQUESTS_PER_WINDOW": 150,
+                    },
+                },
+                "ENDPOINTS": {
+                    "withings": {"base_url": "https://wbsapi.withings.net"},
+                    "fitbit": {
+                        "base_url": "https://api.fitbit.com",
+                        "source_mapping": {},
+                        "logtype_mapping": {},
+                    },
+                },
+            }
+            mock.CIRCUIT_BREAKER_CONFIG = {
+                "FAILURE_THRESHOLD": 5,
+                "SUCCESS_THRESHOLD": 3,
+                "PROVIDER_TIMEOUT": 60,
+                "FHIR_TIMEOUT": 120,
+                "FHIR_FAILURE_THRESHOLD": 5,
+                "FHIR_SUCCESS_THRESHOLD": 3,
+            }
+            yield mock
+
+    @pytest.fixture
+    def client(self, mock_settings):
+        """Create client instance."""
+        import ingestors.api_clients
+
+        ingestors.api_clients._unified_client = None
+        return UnifiedHealthDataClient()
+
+    def test_server_reported_exhausted_triggers_sleep(self, client):
+        """Test that server-reported rate limit exhaustion triggers sleep."""
+        import time
+
+        # Simulate server reporting rate limit exhausted
+        client._fitbit_rate_limit_info["user-1"] = {
+            "remaining": 0,
+            "reset_seconds": 1,
+            "updated_at": time.time(),
+        }
+
+        with patch("ingestors.api_clients.time") as mock_time:
+            mock_time.time.return_value = time.time()
+            client._check_rate_limit(Provider.FITBIT, "user-1")
+
+            # Should have slept for 1 second based on server-reported reset
+            mock_time.sleep.assert_called_once_with(1)
+
+    def test_stale_server_info_ignored(self, client):
+        """Test that stale server-reported info (>5 min old) is ignored."""
+        import time
+
+        # Simulate stale server info (6 minutes old)
+        client._fitbit_rate_limit_info["user-1"] = {
+            "remaining": 0,
+            "reset_seconds": 100,
+            "updated_at": time.time() - 360,
+        }
+
+        # Should fall through to client-side tracking, not sleep for 100s
+        client._check_rate_limit(Provider.FITBIT, "user-1")
+
+        # Should have tracked via client-side (1 request recorded)
+        assert len(client._request_times["fitbit:user-1"]) == 1
+
+    def test_server_info_with_remaining_allows_request(self, client):
+        """Test that server-reported remaining > 0 allows normal client-side tracking."""
+        import time
+
+        client._fitbit_rate_limit_info["user-1"] = {
+            "remaining": 50,
+            "reset_seconds": 1800,
+            "updated_at": time.time(),
+        }
+
+        client._check_rate_limit(Provider.FITBIT, "user-1")
+
+        # Should proceed normally with client-side tracking
+        assert len(client._request_times["fitbit:user-1"]) == 1

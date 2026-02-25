@@ -417,6 +417,12 @@ class FitbitHealthDataManager(BaseHealthDataManager):
 
             if data_type == HealthDataType.HEART_RATE:
                 for data_point in raw_data:
+                    metadata = {
+                        "source": "fitbit_api",
+                        "heart_rate_type": data_point.get("heart_rate_type", "resting"),
+                    }
+                    if data_point.get("heart_rate_zones"):
+                        metadata["heart_rate_zones"] = data_point["heart_rate_zones"]
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.HEART_RATE,
@@ -424,10 +430,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         value=float(data_point["value"]),
                         unit=FHIR_UNITS["heart_rate"]["display"],
                         device_id=data_point.get("device_id"),
-                        metadata={
-                            "source": "fitbit_api",
-                            "heart_rate_type": data_point.get("heart_rate_type", "resting"),
-                        },
+                        metadata=metadata,
                         measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
                     )
                     records.append(record)

@@ -102,6 +102,8 @@ class UnifiedHealthDataClient:
 
         # Rate limiting tracking per provider
         self._request_times: dict[str, list[float]] = defaultdict(list)
+        # Server-reported Fitbit rate limit state (from response headers)
+        self._fitbit_rate_limit_info: dict[str, Any] = {}
 
     def get_health_data(
         self, provider: Provider, data_type: HealthDataType, user_id: str, date_range: DateRange
@@ -317,6 +319,25 @@ class UnifiedHealthDataClient:
             refresh_token=refresh_token,
         )
 
+        # Install response hook to capture Fitbit rate limit headers
+        def _capture_rate_limit_headers(response, *args, **kwargs):
+            remaining = response.headers.get("Fitbit-Rate-Limit-Remaining")
+            reset = response.headers.get("Fitbit-Rate-Limit-Reset")
+            if remaining is not None:
+                self._fitbit_rate_limit_info[query.user_id] = {
+                    "remaining": int(remaining),
+                    "reset_seconds": int(reset) if reset else None,
+                    "updated_at": time.time(),
+                }
+                if int(remaining) < 10:
+                    self.logger.warning(
+                        f"Fitbit rate limit low for user {query.user_id}: "
+                        f"{remaining} requests remaining, resets in {reset}s"
+                    )
+            return response
+
+        client.client.session.hooks["response"].append(_capture_rate_limit_headers)
+
         # Get user devices for device ID mapping
         user_devices = self._get_fitbit_user_devices(client, query.user_id)
 
@@ -407,6 +428,12 @@ class UnifiedHealthDataClient:
                 break
 
             self.logger.debug(f"Withings pagination: page {page + 1}, offset={offset}")
+        else:
+            # Loop completed without break: max_pages exhausted but more data available
+            self.logger.warning(
+                f"Withings pagination limit reached: fetched {max_pages} pages but more data may be available "
+                f"(url={url}, action={params.get('action', 'unknown')})"
+            )
 
         return all_data or {"status": 0, "body": {}}
 
@@ -822,19 +849,40 @@ class UnifiedHealthDataClient:
 
         if heart_rate_response and "activities-heart" in heart_rate_response:
             for daily_data in heart_rate_response["activities-heart"]:
-                if "value" in daily_data and "restingHeartRate" in daily_data["value"]:
-                    parsed_date = dateparse.parse_date(daily_data["dateTime"])
-                    if parsed_date:
-                        timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
-                        results.append(
-                            {
-                                "timestamp": timestamp,
-                                "value": float(daily_data["value"]["restingHeartRate"]),
-                                "heart_rate_type": "resting",
-                                "device_id": primary_device_id,
-                                "measurement_source": MeasurementSource.DEVICE,
-                            }
-                        )
+                if "value" not in daily_data or "restingHeartRate" not in daily_data["value"]:
+                    continue
+
+                parsed_date = dateparse.parse_date(daily_data["dateTime"])
+                if not parsed_date:
+                    continue
+
+                timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+                value = daily_data["value"]
+
+                # Extract heart rate zones if present (Fat Burn, Cardio, Peak, Out of Range)
+                heart_rate_zones = None
+                if "heartRateZones" in value:
+                    heart_rate_zones = [
+                        {
+                            "name": zone.get("name"),
+                            "min": zone.get("min"),
+                            "max": zone.get("max"),
+                            "minutes": zone.get("minutes", 0),
+                            "calories_out": zone.get("caloriesOut", 0),
+                        }
+                        for zone in value["heartRateZones"]
+                    ]
+
+                results.append(
+                    {
+                        "timestamp": timestamp,
+                        "value": float(value["restingHeartRate"]),
+                        "heart_rate_type": "resting",
+                        "heart_rate_zones": heart_rate_zones,
+                        "device_id": primary_device_id,
+                        "measurement_source": MeasurementSource.DEVICE,
+                    }
+                )
 
         return results
 
@@ -1203,7 +1251,22 @@ class UnifiedHealthDataClient:
 
         Supports per-provider rate limit configuration (e.g., Fitbit: 150 req/hour/user)
         with fallback to global defaults.
+
+        Withings uses an application-level rate limit (120 req/min shared across all users),
+        while Fitbit uses a per-user rate limit (150 req/hour per user).
         """
+        # For Fitbit: check server-reported rate limit info first
+        if provider == Provider.FITBIT and user_id in self._fitbit_rate_limit_info:
+            info = self._fitbit_rate_limit_info[user_id]
+            # Only trust recent data (within last 5 minutes)
+            if time.time() - info["updated_at"] < 300 and info["remaining"] <= 0 and info.get("reset_seconds"):
+                self.logger.warning(
+                    f"Fitbit server reports rate limit exhausted for user {user_id}, "
+                    f"sleeping for {info['reset_seconds']}s"
+                )
+                time.sleep(info["reset_seconds"])
+                return
+
         # Use per-provider rate limits if configured, else global defaults
         provider_limits = self.config.get("PROVIDER_RATE_LIMITS", {}).get(provider.value, {})
         rate_limit_window = provider_limits.get("RATE_LIMIT_WINDOW", self.config["RATE_LIMIT_WINDOW"])
@@ -1212,7 +1275,9 @@ class UnifiedHealthDataClient:
         current_time = time.time()
         window_start = current_time - rate_limit_window
 
-        rate_key = f"{provider.value}:{user_id}"
+        # Withings: application-level limit (shared across all users).
+        # Fitbit: per-user limit.
+        rate_key = provider.value if provider == Provider.WITHINGS else f"{provider.value}:{user_id}"
         self._request_times[rate_key] = [t for t in self._request_times[rate_key] if t > window_start]
 
         if len(self._request_times[rate_key]) >= max_requests:

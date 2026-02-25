@@ -257,6 +257,12 @@ API_CLIENT_CONFIG = {
             "RATE_LIMIT_WINDOW": int(os.environ.get("FITBIT_RATE_LIMIT_WINDOW", "3600")),  # 1 hour
             "MAX_REQUESTS_PER_WINDOW": int(os.environ.get("FITBIT_MAX_REQUESTS_PER_WINDOW", "150")),
         },
+        "withings": {
+            "RATE_LIMIT_WINDOW": int(os.environ.get("WITHINGS_RATE_LIMIT_WINDOW", "60")),  # 1 minute
+            "MAX_REQUESTS_PER_WINDOW": int(
+                os.environ.get("WITHINGS_MAX_REQUESTS_PER_WINDOW", "100")
+            ),  # 100 of 120 API limit (safety margin)
+        },
     },
     "ENDPOINTS": {
         "withings": {
