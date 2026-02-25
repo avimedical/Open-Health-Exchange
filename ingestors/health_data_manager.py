@@ -98,7 +98,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
         super().__init__(Provider.WITHINGS)
 
     def get_supported_data_types(self) -> list[HealthDataType]:
-        """Withings supports heart rate, steps, weight, blood pressure, ECG, temperature, SpO2, sleep"""
+        """Withings supports heart rate, steps, weight, blood pressure, ECG, temperature, SpO2, sleep, RR intervals"""
         return [
             HealthDataType.HEART_RATE,
             HealthDataType.STEPS,
@@ -108,6 +108,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
             HealthDataType.TEMPERATURE,
             HealthDataType.SPO2,
             HealthDataType.SLEEP,
+            HealthDataType.RR_INTERVALS,
         ]
 
     def fetch_health_data(
@@ -189,6 +190,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                             device_id=activity.get("device_id"),
                             metadata={
                                 "source": "withings_api",
+                                "original_date": activity.get("original_date"),
                                 "distance": activity.get("distance"),
                                 "calories": activity.get("calories"),
                                 "elevation": activity.get("elevation"),
@@ -220,7 +222,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         user_id=user_id,
                         data_type=HealthDataType.BLOOD_PRESSURE,
                         timestamp=measurement["timestamp"],
-                        value=float(measurement["value"]),
+                        value=measurement["value"],
                         unit=FHIR_UNITS["blood_pressure"]["display"],
                         device_id=measurement.get("device_id"),
                         metadata={
@@ -320,6 +322,23 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                     )
                     records.append(record)
 
+            elif data_type == HealthDataType.RR_INTERVALS:
+                for measurement in raw_data:
+                    record = self._create_health_record(
+                        user_id=user_id,
+                        data_type=HealthDataType.RR_INTERVALS,
+                        timestamp=measurement["timestamp"],
+                        value=float(measurement["value"]),
+                        unit=FHIR_UNITS["time_ms"]["display"],
+                        device_id=measurement.get("device_id"),
+                        metadata={
+                            "source": "withings_api",
+                            "hr": measurement.get("hr"),
+                        },
+                        measurement_source=measurement.get("measurement_source", MeasurementSource.DEVICE),
+                    )
+                    records.append(record)
+
         except APIError as e:
             self.logger.error(f"API error fetching {data_type} from Withings: {e}")
             raise
@@ -398,6 +417,12 @@ class FitbitHealthDataManager(BaseHealthDataManager):
 
             if data_type == HealthDataType.HEART_RATE:
                 for data_point in raw_data:
+                    metadata = {
+                        "source": "fitbit_api",
+                        "heart_rate_type": data_point.get("heart_rate_type", "resting"),
+                    }
+                    if data_point.get("heart_rate_zones"):
+                        metadata["heart_rate_zones"] = data_point["heart_rate_zones"]
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.HEART_RATE,
@@ -405,10 +430,7 @@ class FitbitHealthDataManager(BaseHealthDataManager):
                         value=float(data_point["value"]),
                         unit=FHIR_UNITS["heart_rate"]["display"],
                         device_id=data_point.get("device_id"),
-                        metadata={
-                            "source": "fitbit_api",
-                            "heart_rate_type": data_point.get("heart_rate_type", "resting"),
-                        },
+                        metadata=metadata,
                         measurement_source=data_point.get("measurement_source", MeasurementSource.UNKNOWN),
                     )
                     records.append(record)

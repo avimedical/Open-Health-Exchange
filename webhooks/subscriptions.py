@@ -39,6 +39,8 @@ class WebhookSubscriptionError(Exception):
 class WebhookSubscriptionManager:
     """Manages webhook subscriptions with health data providers"""
 
+    _WITHINGS_NOTIFY_URL = "https://wbsapi.withings.net/notify"
+
     def __init__(self):
         self.base_webhook_url = settings.WEBHOOK_BASE_URL
 
@@ -61,7 +63,7 @@ class WebhookSubscriptionManager:
             access_token = social_auth.access_token
 
             # Withings subscription API endpoint
-            url = "https://wbsapi.withings.net/notify"
+            url = self._WITHINGS_NOTIFY_URL
             callback_url = f"{self.base_webhook_url}withings/"
 
             # Validate and resolve subscription categories from data types
@@ -85,9 +87,9 @@ class WebhookSubscriptionManager:
             )
 
             for appli in appli_types:
-                params = {
+                headers = {"Authorization": f"Bearer {access_token}"}
+                body_params = {
                     "action": "subscribe",
-                    "access_token": access_token,
                     "callbackurl": callback_url,
                     "comment": f"health_sync_{user_id}_{appli}",
                     "appli": appli,
@@ -97,7 +99,9 @@ class WebhookSubscriptionManager:
                     logger.info(
                         f"Creating Withings subscription for user {user_id}, appli {appli} (callback: {callback_url})"
                     )
-                    response = requests.post(url, params=params, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
+                    response = requests.post(
+                        url, data=body_params, headers=headers, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"]
+                    )
                     response.raise_for_status()
 
                     result = response.json()
@@ -264,15 +268,15 @@ class WebhookSubscriptionManager:
             social_auth = self._get_user_social_auth(user_id, Provider.WITHINGS)
             access_token = social_auth.access_token
 
-            url = "https://wbsapi.withings.net/notify"
-            params = {
+            url = self._WITHINGS_NOTIFY_URL
+            headers = {"Authorization": f"Bearer {access_token}"}
+            body_params = {
                 "action": "revoke",
-                "access_token": access_token,
                 "callbackurl": f"{self.base_webhook_url}withings/",
                 "appli": appli,
             }
 
-            response = requests.post(url, params=params, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
+            response = requests.post(url, data=body_params, headers=headers, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
             response.raise_for_status()
 
             result = response.json()
@@ -319,11 +323,34 @@ class WebhookSubscriptionManager:
         """List all webhook subscriptions for a user"""
         subscriptions = []
 
-        # Check Withings subscriptions
+        # Check Withings subscriptions via Notify List API
         try:
-            # Withings doesn't have a direct API to list subscriptions
-            # We would need to track them in our database
-            logger.info(f"Checking Withings subscriptions for user {user_id}")
+            social_auth = self._get_user_social_auth(user_id, Provider.WITHINGS)
+            access_token = social_auth.access_token
+
+            url = self._WITHINGS_NOTIFY_URL
+            headers = {"Authorization": f"Bearer {access_token}"}
+            body_params = {"action": "list"}
+
+            response = requests.post(url, data=body_params, headers=headers, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("status") == 0:
+                    for profile in result.get("body", {}).get("profiles", []):
+                        subscription = WebhookSubscription(
+                            provider=Provider.WITHINGS,
+                            user_id=user_id,
+                            callback_url=profile.get("callbackurl"),
+                            data_types=[str(profile.get("appli"))],
+                            is_active=True,
+                        )
+                        subscriptions.append(subscription)
+                else:
+                    logger.error(f"Withings Notify List error: status={result.get('status')}")
+            else:
+                logger.error(f"Failed to list Withings subscriptions: {response.status_code}")
+        except WebhookSubscriptionError:
+            logger.debug(f"User {user_id} not connected to Withings - skipping subscription list")
         except Exception as e:
             logger.error(f"Error checking Withings subscriptions: {e}")
 
@@ -368,39 +395,3 @@ class WebhookSubscriptionManager:
 
         except Exception as e:
             raise WebhookSubscriptionError(f"User {user_id} not connected to {provider.value}: {e}")
-
-    def _map_data_types_to_withings_appli(self, data_types: list[str]) -> list[int]:
-        """
-        DEPRECATED: Use ingestors.provider_mappings.resolve_subscription_categories() instead
-
-        This method is kept for backward compatibility but should not be used in new code.
-        All data type configuration is now centralized in provider_mappings.py
-
-        Official Withings API documentation:
-        https://developer.withings.com/developer-guide/v3/data-api/keep-user-data-up-to-date/
-        """
-        logger.warning("_map_data_types_to_withings_appli is deprecated, use provider_mappings module")
-        mapping = {
-            "weight": [1],  # Appli 1: Weight-related metrics (weight, fat mass, muscle mass)
-            "fat_mass": [1],  # Appli 1: Fat mass via body composition
-            "temperature": [2],  # Appli 2: Temperature-related data
-            "blood_pressure": [4],  # Appli 4: Pressure-related data (BP, heart pulse, SPO2)
-            "heart_rate": [4],  # Appli 4: Pressure-related data includes heart pulse
-            "spo2": [4],  # Appli 4: Pressure-related data includes SPO2
-            "steps": [16],  # Appli 16: Activity data (steps, distance, calories, workouts)
-            "sleep": [44],  # Appli 44: Sleep-related data
-            "rr_intervals": [44],  # Appli 44: Sleep data includes RR intervals
-            "ecg": [54],  # Appli 54: ECG data (FIXED: was 50, should be 54)
-            "glucose": [58],  # Appli 58: Glucose data
-        }
-
-        appli_set = set()
-        for data_type in data_types:
-            if data_type in mapping:
-                appli_set.update(mapping[data_type])
-            else:
-                logger.warning(f"No Withings appli mapping found for data type: {data_type}")
-
-        result = list(appli_set) if appli_set else [4]  # Default to activity data
-        logger.info(f"Mapped data types {data_types} to Withings appli IDs: {result}")
-        return result
