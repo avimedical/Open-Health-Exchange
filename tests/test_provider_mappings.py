@@ -330,10 +330,15 @@ class TestGetDataTypeConfig:
 
     def test_returns_none_for_type_not_on_provider(self):
         """Test returns None for type not supported by provider."""
-        # glucose is Withings-only
-        config = get_data_type_config(Provider.FITBIT, "glucose")
+        # pulse_wave_velocity is Withings-only
+        config = get_data_type_config(Provider.FITBIT, "pulse_wave_velocity")
 
         assert config is None
+
+    def test_glucose_not_supported_by_any_provider(self):
+        """Test glucose is not supported by any provider (no public API support)."""
+        assert get_data_type_config(Provider.WITHINGS, "glucose") is None
+        assert get_data_type_config(Provider.FITBIT, "glucose") is None
 
 
 class TestGetSupportedDataTypes:
@@ -406,7 +411,7 @@ class TestValidateDataTypes:
         """Test validation for Fitbit."""
         supported, unsupported = validate_data_types(Provider.FITBIT, ["heart_rate", "glucose", "sleep"])
 
-        # glucose is Withings-only
+        # glucose is not supported by any provider (no public API)
         assert "heart_rate" in supported
         assert "sleep" in supported
         assert "glucose" in unsupported

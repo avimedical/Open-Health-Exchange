@@ -108,7 +108,6 @@ PROVIDER_CONFIGS = {
             "sleep": ["44"],  # Appli 44: Sleep-related data
             "rr_intervals": ["44"],  # Appli 44: Sleep data includes RR intervals
             "ecg": ["54"],  # Appli 54: ECG data (FIXED: was 50, correct is 54)
-            "glucose": ["58"],  # Appli 58: Glucose data
             "pulse_wave_velocity": ["4"],  # Appli 4: Likely part of pressure-related measurements
         },
     ),

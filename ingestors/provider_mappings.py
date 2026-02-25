@@ -198,18 +198,6 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         description="Heart rate variability measurements",
         data_fields="hr,rr,snoring",
     ),
-    "glucose": DataTypeConfig(
-        name="glucose",
-        display_name="Blood Glucose",
-        subscription_categories=["58"],  # Appli 58: Glucose data
-        api_endpoint="/measure",
-        api_method=APIMethod.POST,
-        api_action="getmeas",
-        meastype=None,  # Glucose meastype TBD - not documented in public cloud API
-        response_processor="_process_withings_measurements",
-        requires_date_range=True,
-        description="Blood glucose measurements",
-    ),
     "pulse_wave_velocity": DataTypeConfig(
         name="pulse_wave_velocity",
         display_name="Pulse Wave Velocity",
