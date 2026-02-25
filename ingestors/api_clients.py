@@ -1012,9 +1012,8 @@ class UnifiedHealthDataClient:
         """Refresh Withings OAuth2 token"""
         refresh_token = social_auth.extra_data.get("refresh_token")
         if not refresh_token:
-            # Log critical error - user must re-authenticate via OAuth
             self.logger.error(
-                f"CRITICAL: User {social_auth.user.ehr_user_id} has no refresh_token for Withings. "
+                f"User {social_auth.user.ehr_user_id} has no refresh_token for Withings. "
                 f"User must re-authenticate through OAuth flow. "
                 f"Preventing infinite retry loop by raising unrecoverable error."
             )
@@ -1043,7 +1042,7 @@ class UnifiedHealthDataClient:
             # Check if it's an unrecoverable error (invalid refresh token)
             if "invalid" in error.lower() or "expired" in error.lower():
                 self.logger.error(
-                    f"CRITICAL: Refresh token invalid/expired for user {social_auth.user.ehr_user_id}. "
+                    f"Refresh token invalid/expired for user {social_auth.user.ehr_user_id}. "
                     f"User must re-authenticate. Error: {error}"
                 )
                 raise APIError(f"Refresh token invalid - user must reconnect: {error}")
@@ -1070,9 +1069,8 @@ class UnifiedHealthDataClient:
 
         refresh_token = social_auth.extra_data.get("refresh_token")
         if not refresh_token:
-            # Log critical error - user must re-authenticate via OAuth
             self.logger.error(
-                f"CRITICAL: User {social_auth.user.ehr_user_id} has no refresh_token for Fitbit. "
+                f"User {social_auth.user.ehr_user_id} has no refresh_token for Fitbit. "
                 f"User must re-authenticate through OAuth flow. "
                 f"Preventing infinite retry loop by raising unrecoverable error."
             )
@@ -1108,7 +1106,7 @@ class UnifiedHealthDataClient:
             error_str = str(e).lower()
             if "invalid" in error_str or "revoked" in error_str or "expired" in error_str:
                 self.logger.error(
-                    f"CRITICAL: Refresh token invalid/revoked for user {social_auth.user.ehr_user_id}. "
+                    f"Refresh token invalid/revoked for user {social_auth.user.ehr_user_id}. "
                     f"User must re-authenticate. Error: {e}"
                 )
                 raise APIError(f"Refresh token invalid - user must reconnect: {e}")
