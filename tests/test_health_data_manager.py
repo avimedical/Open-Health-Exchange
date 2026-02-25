@@ -94,7 +94,8 @@ class TestWithingsHealthDataManager:
         assert HealthDataType.TEMPERATURE in supported
         assert HealthDataType.SPO2 in supported
         assert HealthDataType.SLEEP in supported
-        assert len(supported) == 8
+        assert HealthDataType.RR_INTERVALS in supported
+        assert len(supported) == 9
 
     def test_fetch_health_data_heart_rate(self, manager):
         """Test fetching heart rate data."""
@@ -761,7 +762,8 @@ class TestHealthDataManagerFactory:
 
         assert HealthDataType.HEART_RATE in data_types
         assert HealthDataType.ECG in data_types
-        assert len(data_types) == 8
+        assert HealthDataType.RR_INTERVALS in data_types
+        assert len(data_types) == 9
 
     def test_get_supported_data_types_fitbit(self):
         """Test getting supported data types for Fitbit."""

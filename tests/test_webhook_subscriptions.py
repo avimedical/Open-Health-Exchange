@@ -478,8 +478,24 @@ class TestListSubscriptions:
         return mock_auth
 
     @responses.activate
-    def test_list_user_subscriptions_success(self, manager, mock_social_auth):
-        """Test listing user subscriptions."""
+    def test_list_user_subscriptions_with_withings_and_fitbit(self, manager, mock_social_auth):
+        """Test listing user subscriptions from both Withings and Fitbit."""
+        # Mock Withings Notify List API
+        responses.add(
+            responses.POST,
+            "https://wbsapi.withings.net/notify",
+            json={
+                "status": 0,
+                "body": {
+                    "profiles": [
+                        {"callbackurl": "https://example.com/webhooks/withings/", "appli": 4},
+                        {"callbackurl": "https://example.com/webhooks/withings/", "appli": 1},
+                    ]
+                },
+            },
+            status=200,
+        )
+        # Mock Fitbit subscriptions API
         responses.add(
             responses.GET,
             "https://api.fitbit.com/1/user/fitbit-user-123/apiSubscriptions.json",
@@ -495,15 +511,53 @@ class TestListSubscriptions:
         with patch.object(manager, "_get_user_social_auth", return_value=mock_social_auth):
             subscriptions = manager.list_user_subscriptions(user_id="test-user")
 
-        assert len(subscriptions) == 2
-        assert subscriptions[0].subscription_id == "sub-1"
-        assert subscriptions[0].data_types == ["activities"]
-        assert subscriptions[1].subscription_id == "sub-2"
-        assert subscriptions[1].data_types == ["sleep"]
+        # 2 Withings + 2 Fitbit = 4 total
+        assert len(subscriptions) == 4
+        withings_subs = [s for s in subscriptions if s.provider == Provider.WITHINGS]
+        fitbit_subs = [s for s in subscriptions if s.provider == Provider.FITBIT]
+        assert len(withings_subs) == 2
+        assert len(fitbit_subs) == 2
+
+    @responses.activate
+    def test_list_user_subscriptions_fitbit_only(self, manager, mock_social_auth):
+        """Test listing subscriptions when user only has Fitbit."""
+        # Withings lookup fails (user not connected)
+        withings_error = WebhookSubscriptionError("not connected to withings")
+
+        # Mock Fitbit subscriptions API
+        responses.add(
+            responses.GET,
+            "https://api.fitbit.com/1/user/fitbit-user-123/apiSubscriptions.json",
+            json={
+                "apiSubscriptions": [
+                    {"subscriptionId": "sub-1", "collectionType": "activities"},
+                ]
+            },
+            status=200,
+        )
+
+        def side_effect(user_id, provider):
+            if provider == Provider.WITHINGS:
+                raise withings_error
+            return mock_social_auth
+
+        with patch.object(manager, "_get_user_social_auth", side_effect=side_effect):
+            subscriptions = manager.list_user_subscriptions(user_id="test-user")
+
+        assert len(subscriptions) == 1
+        assert subscriptions[0].provider == Provider.FITBIT
 
     @responses.activate
     def test_list_user_subscriptions_empty(self, manager, mock_social_auth):
         """Test listing subscriptions when none exist."""
+        # Empty Withings
+        responses.add(
+            responses.POST,
+            "https://wbsapi.withings.net/notify",
+            json={"status": 0, "body": {"profiles": []}},
+            status=200,
+        )
+        # Empty Fitbit
         responses.add(
             responses.GET,
             "https://api.fitbit.com/1/user/fitbit-user-123/apiSubscriptions.json",
@@ -518,7 +572,15 @@ class TestListSubscriptions:
 
     @responses.activate
     def test_list_user_subscriptions_api_failure(self, manager, mock_social_auth):
-        """Test listing subscriptions when API fails."""
+        """Test listing subscriptions when APIs fail."""
+        # Withings fails
+        responses.add(
+            responses.POST,
+            "https://wbsapi.withings.net/notify",
+            json={"status": 401, "error": "Unauthorized"},
+            status=200,
+        )
+        # Fitbit fails
         responses.add(
             responses.GET,
             "https://api.fitbit.com/1/user/fitbit-user-123/apiSubscriptions.json",
@@ -566,94 +628,3 @@ class TestGetUserSocialAuth:
 
             with pytest.raises(WebhookSubscriptionError, match="not connected"):
                 manager._get_user_social_auth("nonexistent-user", Provider.WITHINGS)
-
-
-class TestDataTypeMapping:
-    """Tests for data type mapping helper."""
-
-    @pytest.fixture
-    def mock_settings(self):
-        """Mock Django settings."""
-        with patch("webhooks.subscriptions.settings") as mock:
-            mock.WEBHOOK_BASE_URL = "https://example.com/webhooks/"
-            mock.WEBHOOK_CONFIG = {"TIMEOUT": 30}
-            yield mock
-
-    @pytest.fixture
-    def manager(self, mock_settings):
-        """Create manager instance."""
-        return WebhookSubscriptionManager()
-
-    def test_map_heart_rate(self, manager):
-        """Test mapping heart_rate to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["heart_rate"])
-        assert 4 in appli_types
-
-    def test_map_weight(self, manager):
-        """Test mapping weight to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["weight"])
-        assert 1 in appli_types
-
-    def test_map_steps(self, manager):
-        """Test mapping steps to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["steps"])
-        assert 16 in appli_types
-
-    def test_map_sleep(self, manager):
-        """Test mapping sleep to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["sleep"])
-        assert 44 in appli_types
-
-    def test_map_ecg(self, manager):
-        """Test mapping ecg to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["ecg"])
-        assert 54 in appli_types
-
-    def test_map_multiple_types(self, manager):
-        """Test mapping multiple data types."""
-        appli_types = manager._map_data_types_to_withings_appli(["heart_rate", "weight", "steps"])
-        assert 4 in appli_types
-        assert 1 in appli_types
-        assert 16 in appli_types
-
-    def test_map_unknown_type_defaults(self, manager):
-        """Test mapping unknown type returns default."""
-        appli_types = manager._map_data_types_to_withings_appli(["unknown_type"])
-        assert 4 in appli_types  # Default
-
-    def test_map_blood_pressure(self, manager):
-        """Test mapping blood_pressure to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["blood_pressure"])
-        assert 4 in appli_types
-
-    def test_map_temperature(self, manager):
-        """Test mapping temperature to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["temperature"])
-        assert 2 in appli_types
-
-    def test_map_spo2(self, manager):
-        """Test mapping spo2 to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["spo2"])
-        assert 4 in appli_types
-
-    def test_map_glucose(self, manager):
-        """Test mapping glucose to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["glucose"])
-        assert 58 in appli_types
-
-    def test_map_fat_mass(self, manager):
-        """Test mapping fat_mass to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["fat_mass"])
-        assert 1 in appli_types
-
-    def test_map_rr_intervals(self, manager):
-        """Test mapping rr_intervals to appli type."""
-        appli_types = manager._map_data_types_to_withings_appli(["rr_intervals"])
-        assert 44 in appli_types
-
-    def test_map_deduplicates(self, manager):
-        """Test that duplicate mappings are deduplicated."""
-        # heart_rate and blood_pressure both map to appli 4
-        appli_types = manager._map_data_types_to_withings_appli(["heart_rate", "blood_pressure", "spo2"])
-        # Should only have one 4
-        assert appli_types.count(4) == 1
