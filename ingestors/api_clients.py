@@ -168,8 +168,8 @@ class UnifiedHealthDataClient:
 
         for query in queries:
             try:
-                # Check rate limit for this provider
-                self._check_rate_limit(provider)
+                # Check rate limit for this provider+user combination
+                self._check_rate_limit(provider, query.user_id)
 
                 # Get provider-specific data
                 data = self._fetch_single_query_data(query)
@@ -250,10 +250,16 @@ class UnifiedHealthDataClient:
         endpoint = endpoint_info["endpoint"]
         params = endpoint_info["params"].copy()
 
-        # Add date range to parameters
-        params.update(
-            {"startdate": int(query.date_range.start.timestamp()), "enddate": int(query.date_range.end.timestamp())}
-        )
+        # Add date range parameters based on endpoint's expected format
+        date_format = endpoint_info.get("date_format", "unix")
+        if date_format == "ymd":
+            # Getactivity, Getsummary use YYYY-MM-DD strings
+            params["startdateymd"] = query.date_range.start.strftime("%Y-%m-%d")
+            params["enddateymd"] = query.date_range.end.strftime("%Y-%m-%d")
+        else:
+            # Getmeas, Heart v2, Sleep v2 Get use unix timestamps
+            params["startdate"] = int(query.date_range.start.timestamp())
+            params["enddate"] = int(query.date_range.end.timestamp())
 
         url = f"{endpoints['base_url']}{endpoint}"
         headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/x-www-form-urlencoded"}
@@ -262,7 +268,7 @@ class UnifiedHealthDataClient:
         # (Withings deprecated multi-meastype requests like "meastype=9,10")
         meastype_list = params.pop("meastype_list", None)
         if meastype_list:
-            # Make separate API calls for each meastype and merge results by grpid
+            # Make separate paginated API calls for each meastype and merge results by grpid
             # Blood pressure has same grpid for systolic/diastolic, so we need to merge measures
             measuregrps_by_id: dict[int, dict[str, Any]] = {}
 
@@ -271,21 +277,7 @@ class UnifiedHealthDataClient:
                 call_params["meastype"] = meastype
 
                 self.logger.debug(f"Fetching Withings {query.data_type.value} with meastype={meastype}")
-                response = self.session.post(url, data=call_params, headers=headers)
-                response.raise_for_status()
-
-                data = response.json()
-
-                if data.get("status") != 0:
-                    error_msg = data.get("error", "Unknown API error")
-                    error_lower = error_msg.lower()
-                    if (
-                        "invalid_token" in error_lower
-                        or "unauthorized" in error_lower
-                        or "invalid session" in error_lower
-                    ):
-                        raise TokenExpiredError(f"Token expired: {error_msg}")
-                    raise APIError(f"Withings API error: {error_msg}")
+                data = self._withings_paginated_request(url, call_params, headers)
 
                 # Merge measuregrps by grpid (same reading can have multiple measures)
                 measuregrps = data.get("body", {}).get("measuregrps", [])
@@ -299,25 +291,11 @@ class UnifiedHealthDataClient:
                         measuregrps_by_id[grpid] = grp
 
             # Create merged response with all unique measuregrps
-            merged_data = {"status": 0, "body": {"measuregrps": list(measuregrps_by_id.values())}}
+            merged_data: dict[str, Any] = {"status": 0, "body": {"measuregrps": list(measuregrps_by_id.values())}}
             return self._process_withings_response(merged_data, query.data_type)
 
-        # Single meastype or no meastype - make single API call
-        response = self.session.post(url, data=params, headers=headers)
-        response.raise_for_status()
-
-        data = response.json()
-
-        if data.get("status") != 0:
-            error_msg = data.get("error", "Unknown API error")
-            # Withings returns various error messages for expired/invalid tokens:
-            # - "invalid_token" - standard OAuth error
-            # - "unauthorized" - generic auth failure
-            # - "Invalid Session: sessionid missing" - expired session
-            error_lower = error_msg.lower()
-            if "invalid_token" in error_lower or "unauthorized" in error_lower or "invalid session" in error_lower:
-                raise TokenExpiredError(f"Token expired: {error_msg}")
-            raise APIError(f"Withings API error: {error_msg}")
+        # Single meastype or no meastype - make paginated API call
+        data = self._withings_paginated_request(url, params, headers)
 
         # Process response data based on data type
         return self._process_withings_response(data, query.data_type)
@@ -359,6 +337,97 @@ class UnifiedHealthDataClient:
             case _:
                 raise APIError(f"Unsupported Fitbit data type: {query.data_type}")
 
+    # Withings numeric error status codes that indicate authentication failure
+    _WITHINGS_AUTH_FAILED_STATUSES = frozenset({100, 101, 102, 200, 401})
+    _WITHINGS_UNAUTHORIZED_STATUSES = frozenset({214, 277})
+
+    def _check_withings_error(self, data: dict[str, Any]) -> None:
+        """Check Withings response for errors and raise appropriate exceptions.
+
+        Handles both numeric status codes (per official API docs) and
+        string-based error messages as fallback.
+        """
+        status = data.get("status", 0)
+        if status == 0:
+            return
+
+        error_msg = data.get("error", f"Withings API error (status {status})")
+
+        # Check numeric status code families (official Withings API docs)
+        if status in self._WITHINGS_AUTH_FAILED_STATUSES:
+            raise TokenExpiredError(f"Authentication failed (status {status}): {error_msg}")
+        if status in self._WITHINGS_UNAUTHORIZED_STATUSES:
+            raise APIError(f"Unauthorized (status {status}): {error_msg}")
+
+        # Fallback: check string-based error messages
+        error_lower = str(error_msg).lower()
+        if "invalid_token" in error_lower or "unauthorized" in error_lower or "invalid session" in error_lower:
+            raise TokenExpiredError(f"Token expired: {error_msg}")
+
+        raise APIError(f"Withings API error (status {status}): {error_msg}")
+
+    def _withings_paginated_request(
+        self,
+        url: str,
+        params: dict[str, Any],
+        headers: dict[str, str],
+        max_pages: int = 10,
+    ) -> dict[str, Any]:
+        """Make Withings API request with pagination support.
+
+        Withings endpoints return 'more' and 'offset' fields when results
+        are paginated. This method handles automatic page fetching.
+        """
+        all_data: dict[str, Any] | None = None
+        offset: int | None = None
+
+        for page in range(max_pages):
+            call_params = params.copy()
+            if offset is not None:
+                call_params["offset"] = offset
+
+            response = self.session.post(url, data=call_params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            self._check_withings_error(data)
+
+            if all_data is None:
+                all_data = data
+            else:
+                self._merge_paginated_body(all_data, data)
+
+            # Check for more pages
+            body = data.get("body", {})
+            more = body.get("more")
+            if more in (0, False, None):
+                break
+            offset = body.get("offset")
+            if offset is None:
+                break
+
+            self.logger.debug(f"Withings pagination: page {page + 1}, offset={offset}")
+
+        return all_data or {"status": 0, "body": {}}
+
+    @staticmethod
+    def _merge_paginated_body(target: dict[str, Any], source: dict[str, Any]) -> None:
+        """Merge paginated Withings response body into accumulated target.
+
+        Handles the different body structures across endpoints:
+        - measuregrps (getmeas)
+        - activities (getactivity)
+        - series (heart, sleep)
+        """
+        target_body = target.get("body", {})
+        source_body = source.get("body", {})
+
+        for key in ("measuregrps", "activities", "series"):
+            if key in source_body:
+                if key not in target_body:
+                    target_body[key] = []
+                target_body[key].extend(source_body[key])
+
     def _get_withings_endpoint_info(self, data_type: HealthDataType) -> dict[str, Any]:
         """
         Get Withings endpoint and parameters for data type using centralized configuration
@@ -382,9 +451,13 @@ class UnifiedHealthDataClient:
         if config.api_action:
             params["action"] = config.api_action
 
-        # Add meastype if specified (for /v2/measure endpoint)
+        # Add category=1 for getmeas to filter real device measures only (not user objectives)
+        if config.api_action == "getmeas":
+            params["category"] = 1
+
+        # Add meastype if specified (for /measure endpoint)
         # Note: Withings deprecated multi-meastype requests (e.g., "meastype=9,10")
-        # For blood pressure, we need to make separate calls for systolic and diastolic
+        # For blood pressure and temperature, we need to make separate calls
         if config.meastype is not None:
             if isinstance(config.meastype, list):
                 # Store list of meastypes to handle separately
@@ -394,7 +467,15 @@ class UnifiedHealthDataClient:
                 # Single meastype
                 params["meastype"] = config.meastype
 
-        endpoint_info = {"endpoint": config.api_endpoint, "params": params}
+        # Add data_fields if specified (for sleep getsummary, activity, etc.)
+        if config.data_fields:
+            params["data_fields"] = config.data_fields
+
+        endpoint_info = {
+            "endpoint": config.api_endpoint,
+            "params": params,
+            "date_format": config.date_format,
+        }
 
         self.logger.debug(
             f"Resolved Withings {data_type.value} to endpoint={config.api_endpoint}, params={endpoint_info['params']}"
@@ -405,7 +486,16 @@ class UnifiedHealthDataClient:
     def _process_withings_response(self, data: dict[str, Any], data_type: HealthDataType) -> list[dict[str, Any]]:
         """Process Withings API response into standardized format"""
         match data_type:
-            case HealthDataType.HEART_RATE | HealthDataType.WEIGHT | HealthDataType.BLOOD_PRESSURE:
+            case (
+                HealthDataType.HEART_RATE
+                | HealthDataType.WEIGHT
+                | HealthDataType.BLOOD_PRESSURE
+                | HealthDataType.TEMPERATURE
+                | HealthDataType.SPO2
+                | HealthDataType.FAT_MASS
+                | HealthDataType.PULSE_WAVE_VELOCITY
+                | HealthDataType.GLUCOSE
+            ):
                 return self._process_withings_measurements(data, data_type)
             case HealthDataType.STEPS:
                 return self._process_withings_activity(data)
@@ -413,18 +503,44 @@ class UnifiedHealthDataClient:
                 return self._process_withings_sleep(data)
             case HealthDataType.ECG:
                 return self._process_withings_ecg(data)
+            case HealthDataType.RR_INTERVALS:
+                return self._process_withings_rr_intervals(data)
             case _:
+                self.logger.warning(f"No processor for Withings data type: {data_type}")
                 return []
 
     def _process_withings_measurements(self, data: dict[str, Any], data_type: HealthDataType) -> list[dict[str, Any]]:
-        """Process Withings measurement data"""
+        """Process Withings measurement data.
+
+        Uses provider_mappings as the single source of truth for meastype matching,
+        eliminating the need for a manual match block or settings.measure_types lookup.
+        """
+        from .provider_mappings import Provider as ProviderEnum
+        from .provider_mappings import get_data_type_config
+
+        config = get_data_type_config(ProviderEnum.WITHINGS, data_type.value)
+        if not config or config.meastype is None:
+            self.logger.warning(f"No meastype configured for {data_type.value} — cannot match measurements")
+            return []
+
+        # Build set of expected meastypes from the single source of truth
+        expected_meastypes = set(config.meastype if isinstance(config.meastype, list) else [config.meastype])
+
+        # Blood pressure requires special handling: pair systolic and diastolic
+        # into a single record with a dict value, as the transformer expects
+        if data_type == HealthDataType.BLOOD_PRESSURE:
+            return self._process_withings_blood_pressure(data, expected_meastypes)
+
         results = []
         measuregrps = data.get("body", {}).get("measuregrps", [])
-        measure_types = self.config["ENDPOINTS"]["withings"]["measure_types"]
 
         for group in measuregrps:
             measures = group.get("measures", [])
             for measure in measures:
+                measure_type = measure.get("type")
+                if measure_type not in expected_meastypes:
+                    continue
+
                 # Calculate actual value (Withings uses scaling)
                 value = measure.get("value", 0)
                 unit = measure.get("unit", 0)
@@ -435,32 +551,75 @@ class UnifiedHealthDataClient:
                 category = group.get("category", 1)
                 measurement_source = MeasurementSource.DEVICE if category == 1 else MeasurementSource.USER
 
-                # Check if this measure matches our requested type
+                results.append(
+                    {
+                        "timestamp": datetime.fromtimestamp(group.get("date", 0), tz=UTC),
+                        "value": float(value),
+                        "device_id": group.get("deviceid"),
+                        "measurement_id": group.get("grpid"),
+                        "measurement_source": measurement_source,
+                        "category": category,
+                    }
+                )
+
+        return results
+
+    def _process_withings_blood_pressure(
+        self, data: dict[str, Any], expected_meastypes: set[int]
+    ) -> list[dict[str, Any]]:
+        """Process Withings blood pressure data, pairing systolic and diastolic into single records.
+
+        Withings meastype 10 = Systolic, meastype 9 = Diastolic.
+        The transformer expects {"systolic": X, "diastolic": Y} as the value.
+        """
+        SYSTOLIC_MEASTYPE = 10
+        DIASTOLIC_MEASTYPE = 9
+
+        results = []
+        measuregrps = data.get("body", {}).get("measuregrps", [])
+
+        for group in measuregrps:
+            measures = group.get("measures", [])
+            systolic = None
+            diastolic = None
+
+            for measure in measures:
                 measure_type = measure.get("type")
-                matches_requested_type = False
+                if measure_type not in expected_meastypes:
+                    continue
 
-                match data_type:
-                    case HealthDataType.HEART_RATE:
-                        matches_requested_type = measure_type == measure_types["heart_rate"]
-                    case HealthDataType.WEIGHT:
-                        matches_requested_type = measure_type == measure_types["weight"]
-                    case HealthDataType.BLOOD_PRESSURE:
-                        matches_requested_type = measure_type in [
-                            measure_types["systolic_bp"],
-                            measure_types["diastolic_bp"],
-                        ]
+                # Calculate actual value (Withings uses scaling)
+                value = measure.get("value", 0)
+                unit = measure.get("unit", 0)
+                if unit != 0:
+                    value = value * (10**unit)
 
-                if matches_requested_type:
-                    results.append(
-                        {
-                            "timestamp": datetime.fromtimestamp(group.get("date", 0), tz=UTC),
-                            "value": float(value),
-                            "device_id": group.get("deviceid"),
-                            "measurement_id": group.get("grpid"),
-                            "measurement_source": measurement_source,
-                            "category": category,
-                        }
-                    )
+                if measure_type == SYSTOLIC_MEASTYPE:
+                    systolic = float(value)
+                elif measure_type == DIASTOLIC_MEASTYPE:
+                    diastolic = float(value)
+
+            if systolic is not None and diastolic is not None:
+                category = group.get("category", 1)
+                measurement_source = MeasurementSource.DEVICE if category == 1 else MeasurementSource.USER
+
+                results.append(
+                    {
+                        "timestamp": datetime.fromtimestamp(group.get("date", 0), tz=UTC),
+                        "value": {"systolic": systolic, "diastolic": diastolic},
+                        "device_id": group.get("deviceid"),
+                        "measurement_id": group.get("grpid"),
+                        "measurement_source": measurement_source,
+                        "category": category,
+                    }
+                )
+            else:
+                grpid = group.get("grpid")
+                self.logger.warning(
+                    f"Incomplete blood pressure reading (grpid={grpid}): "
+                    f"systolic={'present' if systolic is not None else 'missing'}, "
+                    f"diastolic={'present' if diastolic is not None else 'missing'}"
+                )
 
         return results
 
@@ -479,6 +638,7 @@ class UnifiedHealthDataClient:
             results.append(
                 {
                     "date": parsed_date,
+                    "original_date": date_str,
                     "steps": activity.get("steps", 0),
                     "distance": activity.get("distance", 0),
                     "calories": activity.get("calories", 0),
@@ -491,24 +651,93 @@ class UnifiedHealthDataClient:
         return results
 
     def _process_withings_sleep(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        """Process Withings sleep data"""
+        """
+        Process Withings sleep data from getsummary action.
+
+        The getsummary response has summary fields nested under a "data" key within
+        each series item, with aggregated durations and quality metrics.
+        """
         results = []
         sleep_series = data.get("body", {}).get("series", [])
 
         for sleep_session in sleep_series:
+            session_data = sleep_session.get("data", {})
             results.append(
                 {
                     "timestamp": datetime.fromtimestamp(sleep_session.get("startdate", 0), tz=UTC),
                     "end_timestamp": datetime.fromtimestamp(sleep_session.get("enddate", 0), tz=UTC),
-                    "duration": sleep_session.get("data", {}).get("totalsleepduration", 0),
-                    "deep_sleep_duration": sleep_session.get("data", {}).get("deepsleepduration", 0),
-                    "light_sleep_duration": sleep_session.get("data", {}).get("lightsleepduration", 0),
-                    "rem_sleep_duration": sleep_session.get("data", {}).get("remsleepduration", 0),
-                    "wake_up_count": sleep_session.get("data", {}).get("wakeupcount", 0),
+                    "duration": session_data.get("total_sleep_time", 0),
+                    "deep_sleep_duration": session_data.get("deepsleepduration", 0),
+                    "light_sleep_duration": session_data.get("lightsleepduration", 0),
+                    "rem_sleep_duration": session_data.get("remsleepduration", 0),
+                    "wake_up_count": session_data.get("wakeupcount", 0),
+                    "sleep_score": session_data.get("sleep_score"),
+                    "sleep_efficiency": session_data.get("sleep_efficiency"),
+                    "hr_average": session_data.get("hr_average"),
+                    "hr_min": session_data.get("hr_min"),
+                    "hr_max": session_data.get("hr_max"),
+                    "rr_average": session_data.get("rr_average"),
+                    "rr_min": session_data.get("rr_min"),
+                    "rr_max": session_data.get("rr_max"),
                     "device_id": sleep_session.get("deviceid"),
                     "measurement_source": MeasurementSource.DEVICE,
                 }
             )
+
+        return results
+
+    def _process_withings_rr_intervals(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """
+        Process Withings RR interval data from /v2/sleep?action=get.
+
+        The get response returns high-frequency data per sleep segment:
+        {
+            "body": {
+                "series": [
+                    {
+                        "startdate": 1594159200,
+                        "enddate": 1594162800,
+                        "state": 0,
+                        "hr": {"1594159200": 65, ...},
+                        "rr": {"1594159200": 920, ...},
+                        "snoring": {"1594159200": 0, ...}
+                    }
+                ]
+            }
+        }
+
+        Each entry in "rr" is timestamp → RR interval in milliseconds.
+        """
+        results = []
+        sleep_series = data.get("body", {}).get("series", [])
+
+        for segment in sleep_series:
+            rr_data = segment.get("rr", {})
+            hr_data = segment.get("hr", {})
+            device_id = segment.get("deviceid")
+
+            if not rr_data:
+                continue
+
+            for ts_str, rr_value in rr_data.items():
+                try:
+                    timestamp = datetime.fromtimestamp(int(ts_str), tz=UTC)
+                except (ValueError, OSError):
+                    self.logger.warning(f"Invalid RR interval timestamp: {ts_str}")
+                    continue
+
+                result = {
+                    "timestamp": timestamp,
+                    "value": float(rr_value),
+                    "device_id": device_id,
+                    "measurement_source": MeasurementSource.DEVICE,
+                }
+
+                # Include corresponding heart rate if available
+                if ts_str in hr_data:
+                    result["hr"] = hr_data[ts_str]
+
+                results.append(result)
 
         return results
 
@@ -581,42 +810,31 @@ class UnifiedHealthDataClient:
     def _fetch_fitbit_heart_rate(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit heart rate data"""
+        """Fetch Fitbit heart rate data using date-range endpoint (max 1 year)"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
 
-        # Fitbit requires daily requests for heart rate data
-        current_date = query.date_range.start.date()
-        end_date_only = query.date_range.end.date()
+        heart_rate_response = client.time_series(
+            resource="activities/heart",
+            base_date=query.date_range.start.date(),
+            end_date=query.date_range.end.date(),
+        )
 
-        while current_date <= end_date_only:
-            try:
-                heart_rate_response = client.time_series(
-                    resource="activities/heart", base_date=current_date, period="1d"
-                )
-
-                if heart_rate_response and "activities-heart" in heart_rate_response:
-                    for daily_data in heart_rate_response["activities-heart"]:
-                        if "value" in daily_data and "restingHeartRate" in daily_data["value"]:
-                            parsed_date = dateparse.parse_date(daily_data["dateTime"])
-                            if parsed_date:
-                                timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
-                                results.append(
-                                    {
-                                        "timestamp": timestamp,
-                                        "value": float(daily_data["value"]["restingHeartRate"]),
-                                        "heart_rate_type": "resting",
-                                        "device_id": primary_device_id,
-                                        "measurement_source": MeasurementSource.DEVICE,
-                                    }
-                                )
-
-                time.sleep(0.1)  # Rate limiting
-
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch heart rate for {current_date}: {e}")
-
-            current_date += timedelta(days=1)
+        if heart_rate_response and "activities-heart" in heart_rate_response:
+            for daily_data in heart_rate_response["activities-heart"]:
+                if "value" in daily_data and "restingHeartRate" in daily_data["value"]:
+                    parsed_date = dateparse.parse_date(daily_data["dateTime"])
+                    if parsed_date:
+                        timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+                        results.append(
+                            {
+                                "timestamp": timestamp,
+                                "value": float(daily_data["value"]["restingHeartRate"]),
+                                "heart_rate_type": "resting",
+                                "device_id": primary_device_id,
+                                "measurement_source": MeasurementSource.DEVICE,
+                            }
+                        )
 
         return results
 
@@ -650,211 +868,225 @@ class UnifiedHealthDataClient:
     def _fetch_fitbit_weight(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit weight data"""
+        """Fetch Fitbit weight data using date-range endpoint (max 31 days)"""
         results = []
         scale_device_id = (
             user_devices.get("scale") or user_devices.get("aria") or self._get_primary_fitbit_device(user_devices)
         )
         source_mapping = self.config["ENDPOINTS"]["fitbit"]["source_mapping"]
 
-        current_date = query.date_range.start.date()
-        end_date_only = query.date_range.end.date()
+        weight_logs = client.get_bodyweight(
+            base_date=query.date_range.start.date(),
+            end_date=query.date_range.end.date(),
+        )
 
-        while current_date <= end_date_only:
-            try:
-                weight_logs = client.get_bodyweight(base_date=current_date)
+        if weight_logs and "weight" in weight_logs:
+            for weight_entry in weight_logs["weight"]:
+                entry_date = weight_entry.get("date", query.date_range.start.strftime("%Y-%m-%d"))
+                entry_time = weight_entry.get("time", "00:00:00")
 
-                if weight_logs and "weight" in weight_logs:
-                    for weight_entry in weight_logs["weight"]:
-                        entry_date = weight_entry.get("date", current_date.strftime("%Y-%m-%d"))
-                        entry_time = weight_entry.get("time", "00:00:00")
-
-                        try:
-                            timestamp_dt = dateparse.parse_datetime(f"{entry_date} {entry_time}")
-                            if timestamp_dt:
-                                timestamp = (
-                                    timestamp_dt.replace(tzinfo=UTC)
-                                    if timestamp_dt.tzinfo is None
-                                    else timestamp_dt.astimezone(UTC)
-                                )
-                            else:
-                                timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
-                        except ValueError:
-                            timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
-
-                        # Get measurement source
-                        fitbit_source = weight_entry.get("source", "")
-                        measurement_source = (
-                            MeasurementSource.DEVICE
-                            if source_mapping.get(fitbit_source) == "device"
-                            else MeasurementSource.USER
+                try:
+                    timestamp_dt = dateparse.parse_datetime(f"{entry_date} {entry_time}")
+                    if timestamp_dt:
+                        timestamp = (
+                            timestamp_dt.replace(tzinfo=UTC)
+                            if timestamp_dt.tzinfo is None
+                            else timestamp_dt.astimezone(UTC)
                         )
+                    else:
+                        parsed_date = dateparse.parse_date(entry_date)
+                        fallback = parsed_date or query.date_range.start.date()
+                        timestamp = datetime.combine(fallback, datetime.min.time(), tzinfo=UTC)
+                except ValueError:
+                    parsed_date = dateparse.parse_date(entry_date)
+                    fallback = parsed_date or query.date_range.start.date()
+                    timestamp = datetime.combine(fallback, datetime.min.time(), tzinfo=UTC)
 
-                        results.append(
-                            {
-                                "timestamp": timestamp,
-                                "value": float(weight_entry["weight"]),
-                                "device_id": scale_device_id,
-                                "log_id": weight_entry.get("logId"),
-                                "measurement_source": measurement_source,
-                                "source": fitbit_source,
-                                "bmi": weight_entry.get("bmi"),
-                            }
-                        )
+                fitbit_source = weight_entry.get("source", "")
+                measurement_source = (
+                    MeasurementSource.DEVICE
+                    if source_mapping.get(fitbit_source) == "device"
+                    else MeasurementSource.USER
+                )
 
-                time.sleep(0.1)  # Rate limiting
-
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch weight for {current_date}: {e}")
-
-            current_date += timedelta(days=1)
+                results.append(
+                    {
+                        "timestamp": timestamp,
+                        "value": float(weight_entry["weight"]),
+                        "device_id": scale_device_id,
+                        "log_id": weight_entry.get("logId"),
+                        "measurement_source": measurement_source,
+                        "source": fitbit_source,
+                        "bmi": weight_entry.get("bmi"),
+                    }
+                )
 
         return results
 
     def _fetch_fitbit_sleep(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit sleep data"""
+        """Fetch Fitbit sleep data using v1.2 date-range endpoint (max 100 days) with sleep stages"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         logtype_mapping = self.config["ENDPOINTS"]["fitbit"]["logtype_mapping"]
+        base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        current_date = query.date_range.start.date()
-        end_date_only = query.date_range.end.date()
+        start_date = query.date_range.start.strftime("%Y-%m-%d")
+        end_date = query.date_range.end.strftime("%Y-%m-%d")
+        url = f"{base_url}/1.2/user/-/sleep/date/{start_date}/{end_date}.json"
+        sleep_logs = client.make_request(url)
 
-        while current_date <= end_date_only:
+        if sleep_logs and "sleep" in sleep_logs:
+            for sleep_entry in sleep_logs["sleep"]:
+                start_time_str = sleep_entry.get("startTime", "")
+                end_time_str = sleep_entry.get("endTime", "")
+
+                try:
+                    sleep_start = dateparse.parse_datetime(start_time_str)
+                    sleep_end = dateparse.parse_datetime(end_time_str)
+                    if sleep_start:
+                        sleep_start = (
+                            sleep_start.astimezone(UTC) if sleep_start.tzinfo else sleep_start.replace(tzinfo=UTC)
+                        )
+                    if sleep_end:
+                        sleep_end = sleep_end.astimezone(UTC) if sleep_end.tzinfo else sleep_end.replace(tzinfo=UTC)
+                    if not sleep_start or not sleep_end:
+                        raise ValueError("Could not parse sleep times")
+                except (ValueError, TypeError):
+                    date_of_sleep = dateparse.parse_date(sleep_entry.get("dateOfSleep", ""))
+                    fallback_date = date_of_sleep or query.date_range.start.date()
+                    sleep_start = datetime.combine(fallback_date, datetime.min.time(), tzinfo=UTC)
+                    sleep_end = sleep_start + timedelta(hours=8)
+
+                fitbit_logtype = sleep_entry.get("logType", "")
+                measurement_source = (
+                    MeasurementSource.DEVICE
+                    if logtype_mapping.get(fitbit_logtype) == "device"
+                    else MeasurementSource.USER
+                )
+
+                sleep_metrics: dict[str, Any] = {
+                    "minutes_asleep": sleep_entry.get("minutesAsleep", 0),
+                    "minutes_awake": sleep_entry.get("minutesAwake", 0),
+                    "minutes_to_fall_asleep": sleep_entry.get("minutesToFallAsleep", 0),
+                    "efficiency": sleep_entry.get("efficiency", 0),
+                    "time_in_bed": sleep_entry.get("timeInBed", 0),
+                    "sleep_type": sleep_entry.get("type", "classic"),
+                }
+
+                # v1.2 "stages" type includes deep/light/rem/wake breakdowns
+                levels = sleep_entry.get("levels", {})
+                summary = levels.get("summary", {})
+                if sleep_entry.get("type") == "stages" and summary:
+                    sleep_metrics["stages"] = {
+                        "deep_minutes": summary.get("deep", {}).get("minutes", 0),
+                        "deep_count": summary.get("deep", {}).get("count", 0),
+                        "light_minutes": summary.get("light", {}).get("minutes", 0),
+                        "light_count": summary.get("light", {}).get("count", 0),
+                        "rem_minutes": summary.get("rem", {}).get("minutes", 0),
+                        "rem_count": summary.get("rem", {}).get("count", 0),
+                        "wake_minutes": summary.get("wake", {}).get("minutes", 0),
+                        "wake_count": summary.get("wake", {}).get("count", 0),
+                    }
+
+                results.append(
+                    {
+                        "timestamp": sleep_start,
+                        "end_time": sleep_end,
+                        "value": sleep_entry.get("minutesAsleep", 0),
+                        "unit": "minutes",
+                        "device_id": primary_device_id,
+                        "log_id": sleep_entry.get("logId"),
+                        "measurement_source": measurement_source,
+                        "log_type": fitbit_logtype,
+                        "sleep_metrics": sleep_metrics,
+                    }
+                )
+
+        return results
+
+    def _parse_fitbit_ecg_readings(
+        self, ecg_readings: list[dict[str, Any]], primary_device_id: str | None
+    ) -> list[dict[str, Any]]:
+        """Parse ECG readings from a Fitbit API response page"""
+        results = []
+        for ecg_entry in ecg_readings:
+            start_time_str = ecg_entry.get("startTime", "")
+
             try:
-                sleep_logs = client.sleep(date=current_date)
+                ecg_timestamp = dateparse.parse_datetime(start_time_str)
+                if ecg_timestamp:
+                    ecg_timestamp = (
+                        ecg_timestamp.astimezone(UTC) if ecg_timestamp.tzinfo else ecg_timestamp.replace(tzinfo=UTC)
+                    )
+                else:
+                    ecg_timestamp = django_timezone.now()
+            except (ValueError, TypeError):
+                ecg_timestamp = django_timezone.now()
 
-                if sleep_logs and "sleep" in sleep_logs:
-                    for sleep_entry in sleep_logs["sleep"]:
-                        start_time_str = sleep_entry.get("startTime", "")
-                        end_time_str = sleep_entry.get("endTime", "")
-
-                        try:
-                            sleep_start = dateparse.parse_datetime(start_time_str)
-                            sleep_end = dateparse.parse_datetime(end_time_str)
-                            if sleep_start:
-                                sleep_start = (
-                                    sleep_start.astimezone(UTC)
-                                    if sleep_start.tzinfo
-                                    else sleep_start.replace(tzinfo=UTC)
-                                )
-                            if sleep_end:
-                                sleep_end = (
-                                    sleep_end.astimezone(UTC) if sleep_end.tzinfo else sleep_end.replace(tzinfo=UTC)
-                                )
-                            if not sleep_start or not sleep_end:
-                                raise ValueError("Could not parse sleep times")
-                        except (ValueError, TypeError):
-                            sleep_start = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
-                            sleep_end = sleep_start + timedelta(hours=8)
-
-                        # Get measurement source
-                        fitbit_logtype = sleep_entry.get("logType", "")
-                        measurement_source = (
-                            MeasurementSource.DEVICE
-                            if logtype_mapping.get(fitbit_logtype) == "device"
-                            else MeasurementSource.USER
-                        )
-
-                        results.append(
-                            {
-                                "timestamp": sleep_start,
-                                "end_time": sleep_end,
-                                "value": sleep_entry.get("minutesAsleep", 0),
-                                "unit": "minutes",
-                                "device_id": primary_device_id,
-                                "log_id": sleep_entry.get("logId"),
-                                "measurement_source": measurement_source,
-                                "log_type": fitbit_logtype,
-                                "sleep_metrics": {
-                                    "minutes_asleep": sleep_entry.get("minutesAsleep", 0),
-                                    "minutes_awake": sleep_entry.get("minutesAwake", 0),
-                                    "minutes_to_fall_asleep": sleep_entry.get("minutesToFallAsleep", 0),
-                                    "efficiency": sleep_entry.get("efficiency", 0),
-                                    "time_in_bed": sleep_entry.get("timeInBed", 0),
-                                },
-                            }
-                        )
-
-                time.sleep(0.1)  # Rate limiting
-
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch sleep data for {current_date}: {e}")
-
-            current_date += timedelta(days=1)
-
+            results.append(
+                {
+                    "timestamp": ecg_timestamp,
+                    "value": ecg_entry.get("averageHeartRate", 0),
+                    "unit": "bpm",
+                    "device_id": primary_device_id,
+                    "measurement_source": MeasurementSource.DEVICE,
+                    "ecg_metrics": {
+                        "result_classification": ecg_entry.get("resultClassification", ""),
+                        "sampling_frequency_hz": ecg_entry.get("samplingFrequencyHz", 0),
+                        "scaling_factor": ecg_entry.get("scalingFactor", 0),
+                        "number_of_samples": ecg_entry.get("numberOfWaveformSamples", 0),
+                        "lead_number": ecg_entry.get("leadNumber", 1),
+                        "device_name": ecg_entry.get("deviceName", ""),
+                        "firmware_version": ecg_entry.get("firmwareVersion", ""),
+                        "feature_version": ecg_entry.get("featureVersion", ""),
+                    },
+                    "waveform_data": {
+                        "samples": ecg_entry.get("waveformSamples", []),
+                        "sampling_frequency_hz": ecg_entry.get("samplingFrequencyHz", 0),
+                        "scaling_factor": ecg_entry.get("scalingFactor", 0),
+                        "number_of_samples": ecg_entry.get("numberOfWaveformSamples", 0),
+                        "lead_number": ecg_entry.get("leadNumber", 1),
+                        "duration_seconds": (
+                            ecg_entry.get("numberOfWaveformSamples", 0)
+                            / max(ecg_entry.get("samplingFrequencyHz", 1), 1)
+                        ),
+                    },
+                }
+            )
         return results
 
     def _fetch_fitbit_ecg(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit ECG data"""
+        """Fetch Fitbit ECG data with pagination (max 10 per page)"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
-        endpoints = self.config["ENDPOINTS"]["fitbit"]
-        base_url = endpoints["base_url"]
+        base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
         try:
             url = f"{base_url}/1/user/-/ecg/list.json"
-            ecg_response = client.make_request(
-                url,
-                params={
-                    "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
-                    "beforeDate": query.date_range.end.strftime("%Y-%m-%d"),
-                    "limit": 10,
-                    "sort": "desc",
-                },
-            )
+            params: dict[str, Any] = {
+                "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
+                "sort": "asc",
+                "limit": 10,
+                "offset": 0,
+            }
 
-            if ecg_response and "ecgReadings" in ecg_response:
-                for ecg_entry in ecg_response["ecgReadings"]:
-                    start_time_str = ecg_entry.get("startTime", "")
+            while url:
+                ecg_response = client.make_request(url, params=params)
 
-                    try:
-                        ecg_timestamp = dateparse.parse_datetime(start_time_str)
-                        if ecg_timestamp:
-                            ecg_timestamp = (
-                                ecg_timestamp.astimezone(UTC)
-                                if ecg_timestamp.tzinfo
-                                else ecg_timestamp.replace(tzinfo=UTC)
-                            )
-                        else:
-                            ecg_timestamp = django_timezone.now()
-                    except (ValueError, TypeError):
-                        ecg_timestamp = django_timezone.now()
+                if ecg_response and "ecgReadings" in ecg_response:
+                    results.extend(self._parse_fitbit_ecg_readings(ecg_response["ecgReadings"], primary_device_id))
 
-                    results.append(
-                        {
-                            "timestamp": ecg_timestamp,
-                            "value": ecg_entry.get("averageHeartRate", 0),
-                            "unit": "bpm",
-                            "device_id": primary_device_id,
-                            "measurement_source": MeasurementSource.DEVICE,
-                            "ecg_metrics": {
-                                "result_classification": ecg_entry.get("resultClassification", ""),
-                                "sampling_frequency_hz": ecg_entry.get("samplingFrequencyHz", 0),
-                                "scaling_factor": ecg_entry.get("scalingFactor", 0),
-                                "number_of_samples": ecg_entry.get("numberOfWaveformSamples", 0),
-                                "lead_number": ecg_entry.get("leadNumber", 1),
-                                "device_name": ecg_entry.get("deviceName", ""),
-                                "firmware_version": ecg_entry.get("firmwareVersion", ""),
-                                "feature_version": ecg_entry.get("featureVersion", ""),
-                            },
-                            "waveform_data": {
-                                "samples": ecg_entry.get("waveformSamples", []),
-                                "sampling_frequency_hz": ecg_entry.get("samplingFrequencyHz", 0),
-                                "scaling_factor": ecg_entry.get("scalingFactor", 0),
-                                "number_of_samples": ecg_entry.get("numberOfWaveformSamples", 0),
-                                "lead_number": ecg_entry.get("leadNumber", 1),
-                                "duration_seconds": (
-                                    ecg_entry.get("numberOfWaveformSamples", 0)
-                                    / max(ecg_entry.get("samplingFrequencyHz", 1), 1)
-                                ),
-                            },
-                        }
-                    )
+                # Follow pagination "next" link if present
+                next_url = ecg_response.get("pagination", {}).get("next", "") if ecg_response else ""
+                if next_url:
+                    url = next_url
+                    params = {}  # next URL includes all params
+                else:
+                    url = ""
 
         except Exception as e:
             self.logger.warning(f"Failed to fetch ECG data: {e}")
@@ -864,82 +1096,88 @@ class UnifiedHealthDataClient:
     def _fetch_fitbit_hrv(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit HRV data"""
+        """Fetch Fitbit HRV intraday data using date-range endpoint (max 30 days, 5-min granularity)"""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
-        endpoints = self.config["ENDPOINTS"]["fitbit"]
-        base_url = endpoints["base_url"]
+        base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        current_date = query.date_range.start.date()
-        end_date_only = query.date_range.end.date()
+        start_date = query.date_range.start.strftime("%Y-%m-%d")
+        end_date = query.date_range.end.strftime("%Y-%m-%d")
+        url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}/all.json"
+        hrv_response = client.make_request(url)
 
-        while current_date <= end_date_only:
-            try:
-                url = f"{base_url}/1/user/-/hrv/date/{current_date.strftime('%Y-%m-%d')}/all.json"
-                hrv_response = client.make_request(url)
+        if hrv_response and "hrv" in hrv_response:
+            for hrv_entry in hrv_response["hrv"]:
+                minute_str = hrv_entry.get("minute", "")
 
-                if hrv_response and "hrv" in hrv_response:
-                    for hrv_entry in hrv_response["hrv"]:
-                        minute_str = hrv_entry.get("minute", "")
+                try:
+                    hrv_timestamp = dateparse.parse_datetime(minute_str)
+                    if hrv_timestamp:
+                        hrv_timestamp = (
+                            hrv_timestamp.astimezone(UTC) if hrv_timestamp.tzinfo else hrv_timestamp.replace(tzinfo=UTC)
+                        )
+                    else:
+                        hrv_timestamp = django_timezone.now()
+                except (ValueError, TypeError):
+                    hrv_timestamp = django_timezone.now()
 
-                        try:
-                            hrv_timestamp = dateparse.parse_datetime(minute_str)
-                            if hrv_timestamp:
-                                hrv_timestamp = (
-                                    hrv_timestamp.astimezone(UTC)
-                                    if hrv_timestamp.tzinfo
-                                    else hrv_timestamp.replace(tzinfo=UTC)
-                                )
-                            else:
-                                hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
-                        except (ValueError, TypeError):
-                            hrv_timestamp = datetime.combine(current_date, datetime.min.time(), tzinfo=UTC)
+                rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
 
-                        rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
-
-                        if rmssd > 0:  # Only include valid readings
-                            results.append(
-                                {
-                                    "timestamp": hrv_timestamp,
-                                    "value": rmssd,
-                                    "unit": "ms",
-                                    "device_id": primary_device_id,
-                                    "measurement_source": MeasurementSource.DEVICE,
-                                    "hrv_metrics": {
-                                        "rmssd": rmssd,
-                                        "coverage": hrv_entry.get("value", {}).get("coverage", 0),
-                                        "hf": hrv_entry.get("value", {}).get("hf", 0),
-                                        "lf": hrv_entry.get("value", {}).get("lf", 0),
-                                    },
-                                }
-                            )
-
-                time.sleep(0.1)  # Rate limiting
-
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch HRV data for {current_date}: {e}")
-
-            current_date += timedelta(days=1)
+                if rmssd > 0:
+                    results.append(
+                        {
+                            "timestamp": hrv_timestamp,
+                            "value": rmssd,
+                            "unit": "ms",
+                            "device_id": primary_device_id,
+                            "measurement_source": MeasurementSource.DEVICE,
+                            "hrv_metrics": {
+                                "rmssd": rmssd,
+                                "coverage": hrv_entry.get("value", {}).get("coverage", 0),
+                                "hf": hrv_entry.get("value", {}).get("hf", 0),
+                                "lf": hrv_entry.get("value", {}).get("lf", 0),
+                            },
+                        }
+                    )
 
         return results
 
     def _get_fitbit_user_devices(self, client: FitbitClient, user_id: str) -> dict[str, str]:
-        """Fetch and cache user's Fitbit devices"""
+        """Fetch user's Fitbit devices.
+
+        When multiple devices share the same type (e.g. two TRACKERs), keeps
+        the one with the most recent lastSyncTime so health data is attributed
+        to the active device.
+
+        Returns a mapping of lowercase device type/version -> device ID.
+        """
         try:
             devices_response = client.get_devices()
-            device_mapping = {}
+            device_mapping: dict[str, str] = {}
+            # Track lastSyncTime per type key so we keep the most recently synced device
+            sync_times: dict[str, str] = {}
 
             for device in devices_response:
                 device_id = device.get("id", "")
                 device_type = device.get("type", "").lower()
-                device_mapping[device_type] = device_id
+                last_sync = device.get("lastSyncTime", "")
 
-                # Also map by device version
+                # Only overwrite if this device synced more recently
+                existing_sync = sync_times.get(device_type, "")
+                if not existing_sync or last_sync > existing_sync:
+                    device_mapping[device_type] = device_id
+                    sync_times[device_type] = last_sync
+
+                # Also map by device version (e.g. "charge 6") for scale lookups
                 device_version = device.get("deviceVersion", "")
                 if device_version:
-                    device_mapping[device_version.lower()] = device_id
+                    version_key = device_version.lower()
+                    existing_sync = sync_times.get(version_key, "")
+                    if not existing_sync or last_sync > existing_sync:
+                        device_mapping[version_key] = device_id
+                        sync_times[version_key] = last_sync
 
-            self.logger.info(f"Fetched {len(device_mapping)} devices for Fitbit user {user_id}")
+            self.logger.info(f"Fetched {len(devices_response)} devices for Fitbit user {user_id}")
             return device_mapping
 
         except Exception as e:
@@ -947,36 +1185,48 @@ class UnifiedHealthDataClient:
             return {}
 
     def _get_primary_fitbit_device(self, user_devices: dict[str, str]) -> str | None:
-        """Get primary Fitbit device ID"""
-        device_types = self.config["ENDPOINTS"]["fitbit"]["device_types"]
+        """Get primary Fitbit device ID.
 
-        for device_type in device_types:
+        Fitbit returns device types TRACKER and SCALE. We prefer tracker for
+        health metrics (HR, steps, sleep, HRV).
+        """
+        # Fitbit API device types are TRACKER and SCALE (lowercased in our mapping)
+        for device_type in ("tracker", "scale"):
             if device_id := user_devices.get(device_type):
                 return device_id
 
-        # Return first available device if none found
-        return list(user_devices.values())[0] if user_devices else None
+        # Fallback: return first available device
+        return next(iter(user_devices.values()), None)
 
-    def _check_rate_limit(self, provider: Provider) -> None:
-        """Check if we're within rate limits for a provider"""
+    def _check_rate_limit(self, provider: Provider, user_id: str) -> None:
+        """Check if we're within rate limits for a provider+user pair.
+
+        Supports per-provider rate limit configuration (e.g., Fitbit: 150 req/hour/user)
+        with fallback to global defaults.
+        """
+        # Use per-provider rate limits if configured, else global defaults
+        provider_limits = self.config.get("PROVIDER_RATE_LIMITS", {}).get(provider.value, {})
+        rate_limit_window = provider_limits.get("RATE_LIMIT_WINDOW", self.config["RATE_LIMIT_WINDOW"])
+        max_requests = provider_limits.get("MAX_REQUESTS_PER_WINDOW", self.config["MAX_REQUESTS_PER_WINDOW"])
+
         current_time = time.time()
-        window_start = current_time - self.config["RATE_LIMIT_WINDOW"]
+        window_start = current_time - rate_limit_window
 
-        # Remove old requests outside the window
-        provider_key = provider.value
-        self._request_times[provider_key] = [t for t in self._request_times[provider_key] if t > window_start]
+        rate_key = f"{provider.value}:{user_id}"
+        self._request_times[rate_key] = [t for t in self._request_times[rate_key] if t > window_start]
 
-        if len(self._request_times[provider_key]) >= self.config["MAX_REQUESTS_PER_WINDOW"]:
-            sleep_time = self._request_times[provider_key][0] + self.config["RATE_LIMIT_WINDOW"] - current_time
+        if len(self._request_times[rate_key]) >= max_requests:
+            sleep_time = self._request_times[rate_key][0] + rate_limit_window - current_time
             if sleep_time > 0:
-                self.logger.warning(f"Rate limit reached for {provider.value}, sleeping for {sleep_time:.2f} seconds")
+                self.logger.warning(
+                    f"Rate limit reached for {provider.value} user {user_id}, sleeping for {sleep_time:.2f}s"
+                )
                 time.sleep(sleep_time)
-                # Clean up old requests after sleeping
                 current_time = time.time()
-                window_start = current_time - self.config["RATE_LIMIT_WINDOW"]
-                self._request_times[provider_key] = [t for t in self._request_times[provider_key] if t > window_start]
+                window_start = current_time - rate_limit_window
+                self._request_times[rate_key] = [t for t in self._request_times[rate_key] if t > window_start]
 
-        self._request_times[provider_key].append(current_time)
+        self._request_times[rate_key].append(current_time)
 
     def _get_user_tokens(self, user_id: str, provider: Provider) -> UserSocialAuth:
         """Get user's OAuth tokens"""

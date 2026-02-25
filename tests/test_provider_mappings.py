@@ -29,18 +29,40 @@ class TestDataTypeConfig:
             display_name="Test Type",
             subscription_categories=["1", "2"],
             api_endpoint="/v2/test",
-            api_method=APIMethod.GET,
+            api_method=APIMethod.POST,
             api_action="get",
             meastype=10,
             response_processor="_process_test",
             requires_date_range=True,
             description="Test data type",
+            date_format="ymd",
+            data_fields="field1,field2",
         )
 
         assert config.name == "test_type"
         assert config.display_name == "Test Type"
         assert config.subscription_categories == ["1", "2"]
-        assert config.api_method == APIMethod.GET
+        assert config.api_method == APIMethod.POST
+        assert config.date_format == "ymd"
+        assert config.data_fields == "field1,field2"
+
+    def test_data_type_config_defaults(self):
+        """Test DataTypeConfig has correct defaults for new fields."""
+        config = DataTypeConfig(
+            name="test",
+            display_name="Test",
+            subscription_categories=["1"],
+            api_endpoint="/test",
+            api_method=APIMethod.POST,
+            api_action=None,
+            meastype=None,
+            response_processor="_process",
+            requires_date_range=True,
+            description="Test",
+        )
+
+        assert config.date_format == "unix"
+        assert config.data_fields is None
 
     def test_data_type_config_is_frozen(self):
         """Test DataTypeConfig is immutable."""
@@ -60,21 +82,26 @@ class TestWithingsDataTypes:
         assert config.name == "ecg"
         assert config.subscription_categories == ["54"]
         assert config.api_endpoint == "/v2/heart"
+        assert config.api_method == APIMethod.POST
         assert config.api_action == "list"
 
     def test_heart_rate_configuration(self):
-        """Test heart rate configuration."""
+        """Test heart rate configuration uses /measure endpoint."""
         config = WITHINGS_DATA_TYPES["heart_rate"]
 
         assert config.name == "heart_rate"
         assert config.subscription_categories == ["4"]
+        assert config.api_endpoint == "/measure"
+        assert config.api_method == APIMethod.POST
         assert config.meastype == 11
 
     def test_weight_configuration(self):
-        """Test weight configuration."""
+        """Test weight configuration uses /measure endpoint."""
         config = WITHINGS_DATA_TYPES["weight"]
 
         assert config.subscription_categories == ["1"]
+        assert config.api_endpoint == "/measure"
+        assert config.api_method == APIMethod.POST
         assert config.meastype == 1
 
     def test_blood_pressure_has_multiple_meastypes(self):
@@ -82,6 +109,61 @@ class TestWithingsDataTypes:
         config = WITHINGS_DATA_TYPES["blood_pressure"]
 
         assert config.meastype == [9, 10]
+        assert config.api_endpoint == "/measure"
+
+    def test_temperature_has_multiple_meastypes(self):
+        """Test temperature has multiple meastypes for body temp, skin temp."""
+        config = WITHINGS_DATA_TYPES["temperature"]
+
+        assert config.meastype == [12, 71, 73]
+        assert config.api_endpoint == "/measure"
+        assert config.api_method == APIMethod.POST
+
+    def test_sleep_uses_getsummary(self):
+        """Test sleep uses getsummary action with YMD date format."""
+        config = WITHINGS_DATA_TYPES["sleep"]
+
+        assert config.api_action == "getsummary"
+        assert config.date_format == "ymd"
+        assert config.data_fields is not None
+        assert "total_sleep_time" in config.data_fields
+
+    def test_steps_uses_ymd_date_format(self):
+        """Test steps/activity uses YMD date format."""
+        config = WITHINGS_DATA_TYPES["steps"]
+
+        assert config.api_endpoint == "/v2/measure"
+        assert config.api_action == "getactivity"
+        assert config.date_format == "ymd"
+        assert config.data_fields is not None
+
+    def test_rr_intervals_includes_hrv_appli(self):
+        """Test rr_intervals subscription includes HRV appli 62."""
+        config = WITHINGS_DATA_TYPES["rr_intervals"]
+
+        assert "44" in config.subscription_categories
+        assert "62" in config.subscription_categories
+
+    def test_pulse_wave_velocity_exists(self):
+        """Test pulse_wave_velocity data type is configured."""
+        config = WITHINGS_DATA_TYPES["pulse_wave_velocity"]
+
+        assert config.api_endpoint == "/measure"
+        assert config.api_action == "getmeas"
+        assert config.meastype == 91
+
+    def test_getmeas_types_use_measure_endpoint(self):
+        """Test all getmeas data types use /measure endpoint (not /v2/measure)."""
+        for name, config in WITHINGS_DATA_TYPES.items():
+            if config.api_action == "getmeas":
+                assert config.api_endpoint == "/measure", (
+                    f"{name} uses {config.api_endpoint} but getmeas requires /measure"
+                )
+
+    def test_all_withings_types_use_post(self):
+        """Test all Withings types use POST method (per official API docs)."""
+        for name, config in WITHINGS_DATA_TYPES.items():
+            assert config.api_method == APIMethod.POST, f"{name} uses {config.api_method} but should use POST"
 
     def test_all_withings_types_have_required_fields(self):
         """Test all Withings types have required fields."""
@@ -90,9 +172,10 @@ class TestWithingsDataTypes:
             assert config.display_name
             assert len(config.subscription_categories) > 0
             assert config.api_endpoint
-            assert config.api_method in [APIMethod.GET, APIMethod.POST]
+            assert config.api_method == APIMethod.POST
             assert config.response_processor
             assert isinstance(config.requires_date_range, bool)
+            assert config.date_format in ("unix", "ymd")
 
 
 class TestFitbitDataTypes:

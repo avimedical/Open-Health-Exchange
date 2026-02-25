@@ -5,7 +5,7 @@ This module provides a centralized, comprehensive mapping between:
 1. User-configured data types (business logic)
 2. Provider-specific subscription categories (webhook subscriptions)
 3. Provider-specific API endpoints and parameters (data fetching)
-4. Provider-specific meastypes (for Withings /v2/measure endpoint)
+4. Provider-specific meastypes (for Withings API endpoints)
 
 Architecture:
     User Config → Data Type Config → Subscription Categories + API Details
@@ -43,12 +43,15 @@ class DataTypeConfig:
         api_endpoint: API endpoint path for fetching this data
         api_method: HTTP method (GET or POST)
         api_action: Action parameter (e.g., 'list', 'getmeas')
-        meastype: Withings-specific meastype(s) for /v2/measure endpoint
+        meastype: Withings-specific meastype(s) for /measure endpoint
             - Can be int, list of ints, or None
-            - Only used for /v2/measure endpoint
+            - Only used for /measure endpoint (getmeas action)
         response_processor: Method name to process API response
         requires_date_range: Whether this data type requires date range parameters
         description: Brief description of what this data type represents
+        date_format: Date parameter format - "unix" for startdate/enddate (timestamps),
+            "ymd" for startdateymd/enddateymd (YYYY-MM-DD strings)
+        data_fields: Comma-separated list of fields to request from the API (optional)
     """
 
     name: str
@@ -61,6 +64,8 @@ class DataTypeConfig:
     response_processor: str
     requires_date_range: bool
     description: str
+    date_format: str = "unix"
+    data_fields: str | None = None
 
 
 # ==============================================================================
@@ -73,7 +78,7 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         display_name="Electrocardiogram (ECG)",
         subscription_categories=["54"],  # Appli 54: ECG data
         api_endpoint="/v2/heart",
-        api_method=APIMethod.GET,
+        api_method=APIMethod.POST,
         api_action="list",
         meastype=None,  # ECG uses Heart v2 API, not measure endpoint
         response_processor="_process_withings_ecg",
@@ -84,8 +89,8 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         name="heart_rate",
         display_name="Heart Rate",
         subscription_categories=["4"],  # Appli 4: Pressure-related data
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
         meastype=11,  # Meastype 11: Heart pulse
         response_processor="_process_withings_measurements",
@@ -96,8 +101,8 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         name="weight",
         display_name="Weight",
         subscription_categories=["1"],  # Appli 1: Weight-related metrics
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
         meastype=1,  # Meastype 1: Weight
         response_processor="_process_withings_measurements",
@@ -108,8 +113,8 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         name="fat_mass",
         display_name="Fat Mass",
         subscription_categories=["1"],  # Appli 1: Weight-related metrics
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
         meastype=8,  # Meastype 8: Fat mass weight
         response_processor="_process_withings_measurements",
@@ -121,19 +126,21 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         display_name="Steps",
         subscription_categories=["16"],  # Appli 16: Activity data
         api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_method=APIMethod.POST,
         api_action="getactivity",
         meastype=None,  # Activity uses different action, not meastype
         response_processor="_process_withings_activity",
         requires_date_range=True,
         description="Daily step count",
+        date_format="ymd",
+        data_fields="steps,distance,elevation,calories,totalcalories",
     ),
     "blood_pressure": DataTypeConfig(
         name="blood_pressure",
         display_name="Blood Pressure",
         subscription_categories=["4"],  # Appli 4: Pressure-related data
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
         meastype=[9, 10],  # Meastype 9: Diastolic, 10: Systolic
         response_processor="_process_withings_measurements",
@@ -144,10 +151,10 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         name="temperature",
         display_name="Body Temperature",
         subscription_categories=["2"],  # Appli 2: Temperature-related data
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
-        meastype=12,  # Meastype 12: Temperature
+        meastype=[12, 71, 73],  # 12: Temperature, 71: Body temp, 73: Skin temp
         response_processor="_process_withings_measurements",
         requires_date_range=True,
         description="Body temperature measurements",
@@ -156,8 +163,8 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         name="spo2",
         display_name="Oxygen Saturation (SpO2)",
         subscription_categories=["4"],  # Appli 4: Pressure-related data
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
         meastype=54,  # Meastype 54: SpO2
         response_processor="_process_withings_measurements",
@@ -169,36 +176,51 @@ WITHINGS_DATA_TYPES: dict[str, DataTypeConfig] = {
         display_name="Sleep Data",
         subscription_categories=["44"],  # Appli 44: Sleep-related data
         api_endpoint="/v2/sleep",
-        api_method=APIMethod.GET,
-        api_action="get",
+        api_method=APIMethod.POST,
+        api_action="getsummary",
         meastype=None,  # Sleep uses different endpoint
         response_processor="_process_withings_sleep",
         requires_date_range=True,
         description="Sleep sessions with stages and quality metrics",
+        date_format="ymd",
+        data_fields="nb_rem_episodes,sleep_efficiency,sleep_latency,total_sleep_time,total_timeinbed,wakeup_latency,waso,apnea_hypopnea_index,breathing_disturbances_intensity,deepsleepduration,lightsleepduration,remsleepduration,snoring,snoringepisodecount,wakeupcount,hr_average,hr_min,hr_max,rr_average,rr_min,rr_max,sleep_score",
     ),
     "rr_intervals": DataTypeConfig(
         name="rr_intervals",
         display_name="RR Intervals (HRV)",
-        subscription_categories=["44"],  # Appli 44: Sleep-related data (includes HRV)
+        subscription_categories=["44", "62"],  # Appli 44: Sleep, 62: HRV
         api_endpoint="/v2/sleep",
-        api_method=APIMethod.GET,
+        api_method=APIMethod.POST,
         api_action="get",
         meastype=None,
         response_processor="_process_withings_sleep",
         requires_date_range=True,
         description="Heart rate variability measurements",
+        data_fields="hr,rr,snoring",
     ),
     "glucose": DataTypeConfig(
         name="glucose",
         display_name="Blood Glucose",
         subscription_categories=["58"],  # Appli 58: Glucose data
-        api_endpoint="/v2/measure",
-        api_method=APIMethod.GET,
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
         api_action="getmeas",
-        meastype=None,  # Glucose meastype TBD - not documented yet
+        meastype=None,  # Glucose meastype TBD - not documented in public cloud API
         response_processor="_process_withings_measurements",
         requires_date_range=True,
         description="Blood glucose measurements",
+    ),
+    "pulse_wave_velocity": DataTypeConfig(
+        name="pulse_wave_velocity",
+        display_name="Pulse Wave Velocity",
+        subscription_categories=["4"],  # Appli 4: Pressure-related data
+        api_endpoint="/measure",
+        api_method=APIMethod.POST,
+        api_action="getmeas",
+        meastype=91,  # Meastype 91: Pulse wave velocity
+        response_processor="_process_withings_measurements",
+        requires_date_range=True,
+        description="Arterial stiffness measurement in m/s",
     ),
 }
 

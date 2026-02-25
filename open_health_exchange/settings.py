@@ -249,55 +249,25 @@ API_CLIENT_CONFIG = {
     "MAX_RETRIES": int(os.environ.get("API_MAX_RETRIES", "3")),
     "BACKOFF_FACTOR": float(os.environ.get("API_BACKOFF_FACTOR", "1.0")),
     "TIMEOUT": int(os.environ.get("API_TIMEOUT", "30")),
-    "RATE_LIMIT_WINDOW": int(os.environ.get("API_RATE_LIMIT_WINDOW", "60")),  # seconds
-    "MAX_REQUESTS_PER_WINDOW": int(os.environ.get("API_MAX_REQUESTS_PER_WINDOW", "300")),
+    "RATE_LIMIT_WINDOW": int(os.environ.get("API_RATE_LIMIT_WINDOW", "60")),  # seconds (global default)
+    "MAX_REQUESTS_PER_WINDOW": int(os.environ.get("API_MAX_REQUESTS_PER_WINDOW", "300")),  # global default
+    # Per-provider rate limit overrides (takes precedence over global defaults)
+    "PROVIDER_RATE_LIMITS": {
+        "fitbit": {
+            "RATE_LIMIT_WINDOW": int(os.environ.get("FITBIT_RATE_LIMIT_WINDOW", "3600")),  # 1 hour
+            "MAX_REQUESTS_PER_WINDOW": int(os.environ.get("FITBIT_MAX_REQUESTS_PER_WINDOW", "150")),
+        },
+    },
     "ENDPOINTS": {
         "withings": {
             "base_url": "https://wbsapi.withings.net",
             "token_url": "https://wbsapi.withings.net/v2/oauth2",
-            "measure_types": {
-                "weight": 1,
-                "height": 4,
-                "fat_free_mass": 5,
-                "fat_ratio": 6,
-                "fat_mass_weight": 8,
-                "diastolic_bp": 9,
-                "systolic_bp": 10,
-                "heart_rate": 11,
-                "temperature": 12,
-                "spo2": 54,
-                "body_temperature": 71,
-                "skin_temperature": 73,
-            },
         },
         "fitbit": {
             "base_url": "https://api.fitbit.com",
-            "device_types": ["tracker", "watch", "scale", "aria"],
             "source_mapping": {"Aria": "device", "AriaAir": "device", "Withings": "device", "API": "user"},
             "logtype_mapping": {"auto_detected": "device", "manual": "user"},
         },
-    },
-    "DATA_TYPE_ENDPOINTS": {
-        "withings": {
-            "heart_rate": "/v2/measure",
-            "activity": "/v2/measure",
-            "weight": "/v2/measure",
-            "sleep": "/v2/sleep",
-            "blood_pressure": "/v2/measure",
-            "ecg": "/v2/heart",  # ECG uses Heart v2 API, not measure endpoint
-        },
-        "fitbit": {
-            "heart_rate": "activities/heart",
-            "activity": "activities/steps",
-            "weight": "body/weight",
-            "sleep": "sleep",
-            "ecg": "/1/user/-/ecg/list.json",
-            "hrv": "/1/user/-/hrv/date/{date}/all.json",
-        },
-    },
-    "SUPPORTED_DATA_TYPES": {
-        "withings": ["heart_rate", "steps", "weight", "blood_pressure", "ecg"],
-        "fitbit": ["heart_rate", "steps", "weight", "sleep", "ecg", "rr_intervals", "hrv"],
     },
 }
 

@@ -151,41 +151,16 @@ class UnifiedHealthDataManager:
         return results
 
     def _get_supported_data_types(self, provider: Provider) -> list[HealthDataType]:
-        """Get supported data types for provider from configuration"""
-        provider_config = self.config.get("SUPPORTED_DATA_TYPES", {})
+        """Get supported data types for provider from centralized provider_mappings"""
+        from .provider_mappings import get_supported_data_types as get_provider_types
 
-        # Default supported types if not in config
-        default_types = {
-            Provider.WITHINGS: [
-                HealthDataType.HEART_RATE,
-                HealthDataType.STEPS,
-                HealthDataType.WEIGHT,
-                HealthDataType.BLOOD_PRESSURE,
-            ],
-            Provider.FITBIT: [
-                HealthDataType.HEART_RATE,
-                HealthDataType.STEPS,
-                HealthDataType.WEIGHT,
-                HealthDataType.SLEEP,
-                HealthDataType.ECG,
-                HealthDataType.RR_INTERVALS,
-            ],
-        }
-
-        # Get config values and convert string names to enum values
-        config_types = provider_config.get(provider.value, [])
-        if config_types and isinstance(config_types[0], str):
-            # Convert string names to HealthDataType enums
-            enum_types = []
-            for type_str in config_types:
-                try:
-                    enum_types.append(HealthDataType(type_str))
-                except ValueError:
-                    self.logger.warning(f"Unknown data type in config: {type_str}")
-            return enum_types
-
-        # Use defaults if config not found or empty
-        return default_types.get(provider, [])
+        enum_types = []
+        for type_str in get_provider_types(provider):
+            try:
+                enum_types.append(HealthDataType(type_str))
+            except ValueError:
+                self.logger.warning(f"Unknown data type from provider_mappings: {type_str}")
+        return enum_types
 
     def _transform_raw_data_to_records(
         self, provider: Provider, data_type: HealthDataType, user_id: str, raw_data: list[dict]
