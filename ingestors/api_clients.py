@@ -264,7 +264,7 @@ class UnifiedHealthDataClient:
         if meastype_list:
             # Make separate API calls for each meastype and merge results by grpid
             # Blood pressure has same grpid for systolic/diastolic, so we need to merge measures
-            measuregrps_by_id = {}
+            measuregrps_by_id: dict[int, dict[str, Any]] = {}
 
             for meastype in meastype_list:
                 call_params = params.copy()
