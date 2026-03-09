@@ -130,11 +130,13 @@ class TestECGTransformer:
         result = transformer.transform(sample_ecg_record, "Patient/test-user")
         ecg_obs = self._get_ecg_observation(result)
 
-        # Find the EKG impression component
-        ecg_components = [c for c in ecg_obs["component"] if c["code"]["coding"][0]["code"] == "8601-7"]
+        # Find the EKG impression component with valueString (AFib classification)
+        afib_components = [
+            c for c in ecg_obs["component"] if c["code"]["coding"][0]["code"] == "8601-7" and "valueString" in c
+        ]
 
-        assert len(ecg_components) > 0
-        assert ecg_components[0]["valueString"] == "NEGATIVE"
+        assert len(afib_components) > 0
+        assert afib_components[0]["valueString"] == "NEGATIVE"
 
     def test_transform_includes_heart_rate_component_modern_mode(self, transformer, sample_ecg_record):
         """Test ECG includes heart rate as component in modern mode."""
@@ -210,6 +212,36 @@ class TestECGTransformer:
         assert len(ecg_obs["identifier"]) > 0
         assert ecg_obs["identifier"][0]["system"] is not None
 
+    def test_transform_waveform_is_first_component(self, transformer, sample_ecg_record):
+        """Test waveform SampledData is the first component (app reads component.first.valueSampledData)."""
+        result = transformer.transform(sample_ecg_record, "Patient/test-user")
+        ecg_obs = self._get_ecg_observation(result)
+
+        first_component = ecg_obs["component"][0]
+        assert "valueSampledData" in first_component
+        assert first_component["code"]["coding"][0]["code"] == "8601-7"
+
+    def test_transform_waveform_uses_loinc_code(self, transformer, sample_ecg_record):
+        """Test waveform component uses LOINC 8601-7 code (not MDC lead code)."""
+        result = transformer.transform(sample_ecg_record, "Patient/test-user")
+        ecg_obs = self._get_ecg_observation(result)
+
+        waveform_component = ecg_obs["component"][0]
+        assert waveform_component["code"]["coding"][0]["system"] == "http://loinc.org"
+        assert waveform_component["code"]["coding"][0]["code"] == "8601-7"
+
+    def test_transform_always_includes_interpretation(self, transformer, sample_ecg_record):
+        """Test interpretation is always included (not only when ECG_AFIB_CODED_INTERPRETATION is set)."""
+        with patch.object(transformer, "get_compatibility_config", return_value={"ECG_EMIT_SEPARATE_HR": False}):
+            result = transformer.transform(sample_ecg_record, "Patient/test-user")
+            ecg_obs = self._get_ecg_observation(result)
+
+            assert "interpretation" in ecg_obs
+            assert (
+                ecg_obs["interpretation"][0]["coding"][0]["system"]
+                == "http://hl7.org/fhir/ValueSet/observation-interpretation"
+            )
+
     def test_transform_includes_meta(self, transformer, sample_ecg_record):
         """Test ECG includes meta information."""
         result = transformer.transform(sample_ecg_record, "Patient/test-user")
@@ -283,13 +315,12 @@ class TestECGTransformerLegacyMode:
             assert "derivedFrom" in hr_obs
             assert len(hr_obs["derivedFrom"]) > 0
 
-    def test_legacy_mode_afib_coded_interpretation(self, transformer, sample_ecg_record):
-        """Test legacy mode includes coded AFib interpretation."""
+    def test_afib_coded_interpretation_always_included(self, transformer, sample_ecg_record):
+        """Test interpretation is always included when result_classification is present."""
         with patch.object(
             transformer,
             "get_compatibility_config",
             return_value={
-                "ECG_AFIB_CODED_INTERPRETATION": True,
                 "ECG_EMIT_SEPARATE_HR": False,
             },
         ):
@@ -319,8 +350,8 @@ class TestSampledDataCreation:
             duration_seconds=30,
         )
 
-        assert result["origin"]["value"] == 2048
-        assert result["origin"]["unit"] == "mV"
+        assert result["origin"]["value"] == 0
+        assert result["origin"]["unit"] == "uV"
         assert result["interval"] == 4.0  # 1000ms / 250Hz
         assert result["intervalUnit"] == "ms"
         assert result["factor"] == 0.01

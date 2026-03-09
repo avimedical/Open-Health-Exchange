@@ -134,16 +134,39 @@ class ECGTransformer(BaseFHIRTransformer):
             loinc_code=ECG_LOINC,
         )
 
-        # Component 1: EKG impression/AFib classification
+        # AFib classification — always add interpretation (app reads it from observation.interpretation)
         result_classification = ecg_metrics.get("result_classification") or ecg_metrics.get("afib")
         if result_classification:
-            # Add coded interpretation if enabled (inwithings format)
-            if config.get("ECG_AFIB_CODED_INTERPRETATION"):
-                afib_interpretation = self._create_afib_interpretation(result_classification)
-                if afib_interpretation:
-                    observation["interpretation"] = afib_interpretation
+            afib_interpretation = self._create_afib_interpretation(result_classification)
+            if afib_interpretation:
+                observation["interpretation"] = afib_interpretation
 
-            # Also add as component for compatibility
+        # Component 1 (MUST be first): ECG waveform data using SampledData
+        # The app reads component.first.valueSampledData — waveform must be at index 0
+        if waveform_data.get("samples"):
+            samples = waveform_data["samples"]
+            sampling_frequency = waveform_data.get("sampling_frequency_hz", 250)
+            scaling_factor = waveform_data.get("scaling_factor", 1)
+
+            # Create SampledData structure for waveform
+            sampled_data = self._create_sampled_data(
+                samples=samples,
+                sampling_frequency=sampling_frequency,
+                scaling_factor=scaling_factor,
+                duration_seconds=waveform_data.get("duration_seconds", 30),
+            )
+
+            observation["component"].append(
+                {
+                    "code": {
+                        "coding": [{"system": "http://loinc.org", "code": ECG_LOINC, "display": "EKG impression"}]
+                    },
+                    "valueSampledData": sampled_data,
+                }
+            )
+
+        # Component 2: AFib classification as valueString
+        if result_classification:
             observation["component"].append(
                 {
                     "code": {
@@ -153,15 +176,13 @@ class ECGTransformer(BaseFHIRTransformer):
                 }
             )
 
-        # Component 2: Average heart rate during ECG (only in modern mode or when not emitting separate HR)
-        # Extract numeric value with type narrowing for mypy
+        # Component 3: Average heart rate during ECG (only in modern mode or when not emitting separate HR)
         heart_rate_value: float | None = (
             float(record.value) if isinstance(record.value, int | float) and record.value > 0 else None
         )
         emit_separate_hr = config.get("ECG_EMIT_SEPARATE_HR", False)
 
         if heart_rate_value is not None and not emit_separate_hr:
-            # Modern mode: HR as component of ECG observation
             observation["component"].append(
                 {
                     "code": {
@@ -173,43 +194,6 @@ class ECGTransformer(BaseFHIRTransformer):
                         "system": "http://unitsofmeasure.org",
                         "code": FHIR_UNITS["heart_rate"]["code"],
                     },
-                }
-            )
-
-        # Component 3: ECG waveform data using SampledData
-        if waveform_data.get("samples"):
-            samples = waveform_data["samples"]
-            sampling_frequency = waveform_data.get("sampling_frequency_hz", 250)
-            scaling_factor = waveform_data.get("scaling_factor", 1)
-            lead_number = waveform_data.get("lead_number", 1)
-
-            # Create SampledData structure for waveform
-            sampled_data = self._create_sampled_data(
-                samples=samples,
-                sampling_frequency=sampling_frequency,
-                scaling_factor=scaling_factor,
-                duration_seconds=waveform_data.get("duration_seconds", 30),
-            )
-
-            # Determine LOINC code based on lead number (Fitbit typically uses Lead I equivalent)
-            lead_loinc_map = {
-                1: {"code": "131329", "display": "MDC_ECG_ELEC_POTL_I"}  # Lead I equivalent
-            }
-
-            lead_info = lead_loinc_map.get(lead_number, {"code": "131328", "display": "MDC_ECG_ELEC_POTL"})
-
-            observation["component"].append(
-                {
-                    "code": {
-                        "coding": [
-                            {
-                                "system": "urn:oid:2.16.840.1.113883.6.24",  # MDC (Medical Device Communication)
-                                "code": lead_info["code"],
-                                "display": lead_info["display"],
-                            }
-                        ]
-                    },
-                    "valueSampledData": sampled_data,
                 }
             )
 
@@ -264,10 +248,10 @@ class ECGTransformer(BaseFHIRTransformer):
 
         return {
             "origin": {
-                "value": 2048,  # Baseline value (typical for ECG)
-                "unit": "mV",
+                "value": 0,
+                "unit": "uV",
                 "system": "http://unitsofmeasure.org",
-                "code": "mV",
+                "code": "uV",
             },
             "interval": interval_ms,
             "intervalUnit": "ms",

@@ -300,7 +300,28 @@ class UnifiedHealthDataClient:
         data = self._withings_paginated_request(url, params, headers)
 
         # Process response data based on data type
-        return self._process_withings_response(data, query.data_type)
+        results = self._process_withings_response(data, query.data_type)
+
+        # For ECG: enrich each record with waveform signal data (requires separate API call per signal)
+        if query.data_type == HealthDataType.ECG and results:
+            for record in results:
+                signal_id = record.get("signal_id")
+                if signal_id:
+                    try:
+                        signal_data = self._fetch_withings_ecg_signal(signal_id, access_token, headers)
+                        signal_body = signal_data.get("body", {})
+                        record["waveform_samples"] = signal_body.get("signal", [])
+                        record["sampling_frequency"] = signal_body.get("sampling_frequency", 500)
+                        self.logger.info(
+                            f"Fetched ECG signal {signal_id}: "
+                            f"{len(record['waveform_samples'])} samples at {record['sampling_frequency']} Hz"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to fetch ECG signal {signal_id}: {e}")
+                        record["waveform_samples"] = []
+                        record["sampling_frequency"] = 0
+
+        return results
 
     @fitbit_circuit_breaker
     def _fetch_fitbit_data(self, query: DataQuery, social_auth: UserSocialAuth) -> list[dict[str, Any]]:
@@ -833,6 +854,27 @@ class UnifiedHealthDataClient:
             )
 
         return results
+
+    def _fetch_withings_ecg_signal(self, signal_id: int, access_token: str, headers: dict[str, str]) -> dict[str, Any]:
+        """Fetch ECG waveform signal data from Withings Heart v2 API (action=get).
+
+        The Heart v2 'list' action only returns metadata (signalid, afib, heart_rate).
+        This method fetches the actual ECG signal samples for a given signalid.
+
+        Returns response with body containing:
+            - signal: list of int values (raw ECG signal)
+            - sampling_frequency: int (samples per second, e.g. 500 Hz)
+            - wearposition: int (device wear location)
+        """
+        endpoints = self.config["ENDPOINTS"]["withings"]
+        url = f"{endpoints['base_url']}/v2/heart"
+        params = {"action": "get", "signalid": signal_id}
+
+        response = self.session.post(url, data=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        self._check_withings_error(data)
+        return data
 
     def _fetch_fitbit_heart_rate(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]

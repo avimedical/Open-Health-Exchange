@@ -241,6 +241,8 @@ class TestWithingsHealthDataManager:
                 "pr_interval": 160,
                 "qt_interval": 400,
                 "qtc_interval": 410,
+                "waveform_samples": [-57, -62, -66, -71, 34],
+                "sampling_frequency": 500,
                 "measurement_source": MeasurementSource.DEVICE,
             }
         ]
@@ -261,8 +263,11 @@ class TestWithingsHealthDataManager:
         assert len(records) == 1
         assert records[0].data_type == HealthDataType.ECG
         assert records[0].unit == "uV"
-        assert records[0].value["heart_rate"] == 72
-        assert records[0].value["signal_id"] == 12345
+        assert records[0].value == 72.0
+        assert records[0].metadata["ecg_metrics"]["result_classification"] == "N"
+        assert records[0].metadata["ecg_metrics"]["signal_id"] == 12345
+        assert records[0].metadata["waveform_data"]["samples"] == [-57, -62, -66, -71, 34]
+        assert records[0].metadata["waveform_data"]["sampling_frequency_hz"] == 500
 
     def test_fetch_health_data_temperature(self, manager):
         """Test fetching temperature data."""
