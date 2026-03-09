@@ -35,8 +35,9 @@ class DevicePublisher:
             # Transform to FHIR Device (no patient reference)
             fhir_device = self.transformer.transform(device_data)
 
-            # Create device directly
-            device_resource: dict[str, Any] = self.fhir_client.create_resource("Device", fhir_device)
+            # Upsert device directly using deterministic ID
+            device_id = fhir_device["id"]
+            device_resource: dict[str, Any] = self.fhir_client.update_resource("Device", device_id, fhir_device)
 
             logger.info(
                 f"Successfully published device {device_resource['id']} for provider {device_data.provider.value}"
