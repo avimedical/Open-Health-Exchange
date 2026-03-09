@@ -308,7 +308,7 @@ class UnifiedHealthDataClient:
                 signal_id = record.get("signal_id")
                 if signal_id:
                     try:
-                        signal_data = self._fetch_withings_ecg_signal(signal_id, access_token, headers)
+                        signal_data = self._fetch_withings_ecg_signal(signal_id, headers)
                         signal_body = signal_data.get("body", {})
                         record["waveform_samples"] = signal_body.get("signal", [])
                         record["sampling_frequency"] = signal_body.get("sampling_frequency", 500)
@@ -316,6 +316,8 @@ class UnifiedHealthDataClient:
                             f"Fetched ECG signal {signal_id}: "
                             f"{len(record['waveform_samples'])} samples at {record['sampling_frequency']} Hz"
                         )
+                    except TokenExpiredError:
+                        raise  # Let token refresh logic in _fetch_single_query_data handle this
                     except Exception as e:
                         self.logger.warning(f"Failed to fetch ECG signal {signal_id}: {e}")
                         record["waveform_samples"] = []
@@ -855,7 +857,7 @@ class UnifiedHealthDataClient:
 
         return results
 
-    def _fetch_withings_ecg_signal(self, signal_id: int, access_token: str, headers: dict[str, str]) -> dict[str, Any]:
+    def _fetch_withings_ecg_signal(self, signal_id: int, headers: dict[str, str]) -> dict[str, Any]:
         """Fetch ECG waveform signal data from Withings Heart v2 API (action=get).
 
         The Heart v2 'list' action only returns metadata (signalid, afib, heart_rate).

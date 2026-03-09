@@ -259,8 +259,6 @@ class ECGTransformer(BaseFHIRTransformer):
             "lowerLimit": -3300,  # Typical ECG range
             "upperLimit": 3300,
             "dimensions": 1,
-            "codeMap": "mV",
-            "offsets": None,  # Using factor instead
             "data": samples_string,
         }
 

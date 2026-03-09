@@ -241,9 +241,10 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                     waveform_samples = measurement.get("waveform_samples", [])
                     sampling_freq = measurement.get("sampling_frequency", 500)
 
-                    # Map Withings afib int (0=normal, 1=afib, 2=inconclusive) to FHIR interpretation codes
-                    afib_code_map = {0: "N", 1: "DET", 2: "IND"}
-                    afib_code = afib_code_map.get(afib_result, "IND") if afib_result is not None else None
+                    # Map Withings afib int (0=normal, 1=afib, 2=inconclusive) to classification keys
+                    # recognized by ECGTransformer._create_afib_interpretation / AFIB_INTERPRETATION_CODES
+                    afib_code_map = {0: "NEGATIVE", 1: "POSITIVE", 2: "INCONCLUSIVE"}
+                    afib_code = afib_code_map.get(afib_result, "INCONCLUSIVE") if afib_result is not None else None
 
                     record = self._create_health_record(
                         user_id=user_id,

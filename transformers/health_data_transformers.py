@@ -548,7 +548,7 @@ class HealthDataTransformer(BaseFHIRTransformer):
             except Exception as e:
                 logger.error(f"Error transforming health record {record.data_type} for {record.user_id}: {e}")
 
-        logger.info(f"Transformed {len(observations)} health records to FHIR Observations")
+        logger.info(f"Transformed {len(records)} health records to {len(observations)} FHIR Observations")
         return observations
 
 

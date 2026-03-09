@@ -264,7 +264,7 @@ class TestWithingsHealthDataManager:
         assert records[0].data_type == HealthDataType.ECG
         assert records[0].unit == "uV"
         assert records[0].value == 72.0
-        assert records[0].metadata["ecg_metrics"]["result_classification"] == "N"
+        assert records[0].metadata["ecg_metrics"]["result_classification"] == "NEGATIVE"
         assert records[0].metadata["ecg_metrics"]["signal_id"] == 12345
         assert records[0].metadata["waveform_data"]["samples"] == [-57, -62, -66, -71, 34]
         assert records[0].metadata["waveform_data"]["sampling_frequency_hz"] == 500
