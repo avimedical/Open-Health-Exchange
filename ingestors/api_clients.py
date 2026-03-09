@@ -1188,49 +1188,88 @@ class UnifiedHealthDataClient:
     def _fetch_fitbit_hrv(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit HRV intraday data using date-range endpoint (max 30 days, 5-min granularity)"""
+        """Fetch Fitbit HRV data, either intraday or summary depending on settings."""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
         start_date = query.date_range.start.strftime("%Y-%m-%d")
         end_date = query.date_range.end.strftime("%Y-%m-%d")
-        url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}/all.json"
-        hrv_response = client.make_request(url)
 
-        if hrv_response and "hrv" in hrv_response:
-            for hrv_entry in hrv_response["hrv"]:
-                minute_str = hrv_entry.get("minute", "")
+        try:
+            if getattr(settings, "FITBIT_INTRADAY_HRV_ENABLED", False):
+                url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}/all.json"
+                hrv_response = client.make_request(url)
 
-                try:
-                    hrv_timestamp = dateparse.parse_datetime(minute_str)
-                    if hrv_timestamp:
-                        hrv_timestamp = (
-                            hrv_timestamp.astimezone(UTC) if hrv_timestamp.tzinfo else hrv_timestamp.replace(tzinfo=UTC)
-                        )
-                    else:
-                        hrv_timestamp = django_timezone.now()
-                except (ValueError, TypeError):
-                    hrv_timestamp = django_timezone.now()
+                if hrv_response and "hrv" in hrv_response:
+                    for hrv_entry in hrv_response["hrv"]:
+                        minute_str = hrv_entry.get("minute", "")
 
-                rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
+                        try:
+                            hrv_timestamp = dateparse.parse_datetime(minute_str)
+                            if hrv_timestamp:
+                                hrv_timestamp = (
+                                    hrv_timestamp.astimezone(UTC)
+                                    if hrv_timestamp.tzinfo
+                                    else hrv_timestamp.replace(tzinfo=UTC)
+                                )
+                            else:
+                                hrv_timestamp = django_timezone.now()
+                        except (ValueError, TypeError):
+                            hrv_timestamp = django_timezone.now()
 
-                if rmssd > 0:
-                    results.append(
-                        {
-                            "timestamp": hrv_timestamp,
-                            "value": rmssd,
-                            "unit": "ms",
-                            "device_id": primary_device_id,
-                            "measurement_source": MeasurementSource.DEVICE,
-                            "hrv_metrics": {
-                                "rmssd": rmssd,
-                                "coverage": hrv_entry.get("value", {}).get("coverage", 0),
-                                "hf": hrv_entry.get("value", {}).get("hf", 0),
-                                "lf": hrv_entry.get("value", {}).get("lf", 0),
-                            },
-                        }
-                    )
+                        rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
+
+                        if rmssd > 0:
+                            results.append(
+                                {
+                                    "timestamp": hrv_timestamp,
+                                    "value": rmssd,
+                                    "unit": "ms",
+                                    "device_id": primary_device_id,
+                                    "measurement_source": MeasurementSource.DEVICE,
+                                    "hrv_metrics": {
+                                        "rmssd": rmssd,
+                                        "coverage": hrv_entry.get("value", {}).get("coverage", 0),
+                                        "hf": hrv_entry.get("value", {}).get("hf", 0),
+                                        "lf": hrv_entry.get("value", {}).get("lf", 0),
+                                    },
+                                }
+                            )
+            else:
+                url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}.json"
+                hrv_response = client.make_request(url)
+
+                if hrv_response and "hrv" in hrv_response:
+                    for hrv_entry in hrv_response["hrv"]:
+                        date_str = hrv_entry.get("dateTime", "")
+
+                        try:
+                            parsed_date = dateparse.parse_date(date_str)
+                            if parsed_date:
+                                hrv_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+                            else:
+                                hrv_timestamp = django_timezone.now()
+                        except (ValueError, TypeError):
+                            hrv_timestamp = django_timezone.now()
+
+                        rmssd = hrv_entry.get("value", {}).get("dailyRmssd", 0)
+
+                        if rmssd > 0:
+                            results.append(
+                                {
+                                    "timestamp": hrv_timestamp,
+                                    "value": rmssd,
+                                    "unit": "ms",
+                                    "device_id": primary_device_id,
+                                    "measurement_source": MeasurementSource.DEVICE,
+                                    "hrv_metrics": {
+                                        "rmssd": rmssd,
+                                    },
+                                }
+                            )
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch HRV/RR intervals data from Fitbit: {e}")
 
         return results
 
