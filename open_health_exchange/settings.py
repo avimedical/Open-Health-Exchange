@@ -575,7 +575,8 @@ FHIR_COMPATIBILITY_CONFIG = {
     "LOINC_OVERRIDES": {
         "steps": os.environ.get("FHIR_LOINC_STEPS", "41950-7"),  # inwithings uses 41950-7
     },
-    # Use coded AFib interpretation (N/DET/IND) instead of valueString
+    # DEPRECATED: AFib interpretation is now always emitted (app reads observation.interpretation).
+    # This flag is retained for backwards compatibility but has no effect.
     "ECG_AFIB_CODED_INTERPRETATION": os.environ.get("FHIR_ECG_AFIB_CODED", "true").lower() == "true",
     # Identifier system URL template
     "IDENTIFIER_SYSTEM_TEMPLATE": os.environ.get("FHIR_IDENTIFIER_SYSTEM", "https://api.{provider}.com/health-data"),

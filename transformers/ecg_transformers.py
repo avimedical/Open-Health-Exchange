@@ -141,8 +141,10 @@ class ECGTransformer(BaseFHIRTransformer):
             if afib_interpretation:
                 observation["interpretation"] = afib_interpretation
 
-        # Component 1 (MUST be first): ECG waveform data using SampledData
-        # The app reads component.first.valueSampledData — waveform must be at index 0
+        # Component 1 (MUST be first when present): ECG waveform data using SampledData
+        # The app reads component.first.valueSampledData — waveform must be at index 0.
+        # If waveform enrichment failed (empty samples), this component is omitted and
+        # the app gracefully handles null valueSampledData (shows "No ECG data available").
         if waveform_data.get("samples"):
             samples = waveform_data["samples"]
             sampling_frequency = waveform_data.get("sampling_frequency_hz", 250)

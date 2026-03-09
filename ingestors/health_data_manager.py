@@ -251,7 +251,7 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                         data_type=HealthDataType.ECG,
                         timestamp=measurement["timestamp"],
                         value=float(heart_rate) if heart_rate is not None else 0.0,
-                        unit="uV",
+                        unit="bpm",
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
