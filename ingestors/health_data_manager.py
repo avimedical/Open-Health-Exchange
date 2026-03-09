@@ -236,26 +236,45 @@ class WithingsHealthDataManager(BaseHealthDataManager):
 
             elif data_type == HealthDataType.ECG:
                 for measurement in raw_data:
+                    heart_rate = measurement.get("heart_rate")
+                    afib_result = measurement.get("afib_result")
+                    waveform_samples = measurement.get("waveform_samples", [])
+                    sampling_freq = measurement.get("sampling_frequency", 500)
+
+                    # Map Withings afib int (0=normal, 1=afib, 2=inconclusive) to classification keys
+                    # recognized by ECGTransformer._create_afib_interpretation / AFIB_INTERPRETATION_CODES
+                    afib_code_map = {0: "NEGATIVE", 1: "POSITIVE", 2: "INCONCLUSIVE"}
+                    afib_code = afib_code_map.get(afib_result, "INCONCLUSIVE") if afib_result is not None else None
+
                     record = self._create_health_record(
                         user_id=user_id,
                         data_type=HealthDataType.ECG,
                         timestamp=measurement["timestamp"],
-                        value={
-                            "heart_rate": measurement.get("heart_rate"),
-                            "signal_id": measurement.get("signal_id"),
-                            "afib_result": measurement.get("afib_result"),
-                            "afib_classification": measurement.get("afib_classification"),
-                        },
-                        unit="uV",  # ECG waveform voltage - no FHIR_UNITS mapping needed
+                        value=float(heart_rate) if heart_rate is not None else 0.0,
+                        unit="bpm",
                         device_id=measurement.get("device_id"),
                         metadata={
                             "source": "withings_api",
                             "device_model": measurement.get("device_model"),
-                            "modified": (measurement["modified"].isoformat() if measurement.get("modified") else None),
-                            "qrs_interval": measurement.get("qrs_interval"),
-                            "pr_interval": measurement.get("pr_interval"),
-                            "qt_interval": measurement.get("qt_interval"),
-                            "qtc_interval": measurement.get("qtc_interval"),
+                            "ecg_metrics": {
+                                "result_classification": afib_code,
+                                "afib": measurement.get("afib_classification"),
+                                "signal_id": measurement.get("signal_id"),
+                                "qrs_interval": measurement.get("qrs_interval"),
+                                "pr_interval": measurement.get("pr_interval"),
+                                "qt_interval": measurement.get("qt_interval"),
+                                "qtc_interval": measurement.get("qtc_interval"),
+                            },
+                            "waveform_data": {
+                                "samples": waveform_samples,
+                                "sampling_frequency_hz": sampling_freq,
+                                "scaling_factor": 1,
+                                "number_of_samples": len(waveform_samples),
+                                "lead_number": 1,
+                                "duration_seconds": (
+                                    len(waveform_samples) / max(sampling_freq, 1) if waveform_samples else 0
+                                ),
+                            },
                         },
                         measurement_source=measurement.get("measurement_source", MeasurementSource.DEVICE),
                     )
