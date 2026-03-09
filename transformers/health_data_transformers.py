@@ -41,8 +41,8 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
     def transform(
         self, record: HealthDataRecord, patient_reference: str, device_reference: str | None = None
-    ) -> dict[str, Any]:
-        """Implementation of abstract transform method from BaseFHIRTransformer"""
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Implementation of abstract transform method from BaseFHIRTransformer."""
         return self.transform_health_record(record, patient_reference, device_reference)
 
     # _safe_float removed - now using unified safe_convert_value from base class
@@ -60,7 +60,10 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
         # Use specialized ECG transformer for ECG data
         if record.data_type == HealthDataType.ECG:
-            return self.ecg_transformer.transform_ecg_to_fhir_panel(record, patient_reference, device_reference)
+            result: dict[str, Any] | list[dict[str, Any]] = self.ecg_transformer.transform_ecg_to_fhir_panel(
+                record, patient_reference, device_reference
+            )
+            return result
 
         # Get FHIR codes and mappings for non-ECG data
         # Use LOINC override if available (e.g., steps: 41950-7 for inwithings compatibility)

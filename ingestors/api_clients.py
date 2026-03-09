@@ -872,7 +872,7 @@ class UnifiedHealthDataClient:
 
         response = self.session.post(url, data=params, headers=headers)
         response.raise_for_status()
-        data = response.json()
+        data: dict[str, Any] = response.json()
         self._check_withings_error(data)
         return data
 
