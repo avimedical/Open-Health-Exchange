@@ -1229,8 +1229,10 @@ class UnifiedHealthDataClient:
 
                 url = f"{base_url}/1/user/-/hrv/date/{current_start_str}/{current_end_str}/all.json"
 
-                # Check rate limit before making request in the chunking loop
-                self._check_rate_limit(Provider.FITBIT, query.user_id)
+                # Rate limit is already checked once per query in _fetch_provider_data.
+                # Only check again for subsequent chunks in this loop to avoid double-counting the first request.
+                if current_start > start_dt:
+                    self._check_rate_limit(Provider.FITBIT, query.user_id)
                 hrv_response = client.make_request(url)
 
                 if hrv_response and "hrv" in hrv_response:
@@ -1242,8 +1244,8 @@ class UnifiedHealthDataClient:
             end_str = query.date_range.end.strftime("%Y-%m-%d")
             url = f"{base_url}/1/user/-/hrv/date/{start_str}/{end_str}.json"
 
-            # Check rate limit before making request
-            self._check_rate_limit(Provider.FITBIT, query.user_id)
+            # Rate limit is already checked once per query in _fetch_provider_data.
+            # No need to check again for this single request.
             hrv_response = client.make_request(url)
 
             if hrv_response and "hrv" in hrv_response:
