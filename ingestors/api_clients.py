@@ -165,7 +165,15 @@ class UnifiedHealthDataClient:
             return {query.cache_key: [] for query in queries}
 
     def _fetch_provider_data(self, provider: Provider, queries: list[DataQuery]) -> dict[str, list[dict[str, Any]]]:
-        """Fetch data for all queries from a specific provider"""
+        """Fetch data for all queries from a specific provider.
+
+        This is the designated error boundary for all per-query data fetching.
+        Individual _fetch_* methods are expected to let exceptions propagate here
+        so that error metrics are recorded correctly and the remaining queries in
+        the batch still execute. Swallowing exceptions inside a _fetch_* method
+        would cause this layer to record a success (with 0 data points) instead
+        of an error, making silent failures invisible in Prometheus.
+        """
         results = {}
 
         for query in queries:
@@ -1157,31 +1165,27 @@ class UnifiedHealthDataClient:
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        try:
-            url = f"{base_url}/1/user/-/ecg/list.json"
-            params: dict[str, Any] = {
-                "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
-                "sort": "asc",
-                "limit": 10,
-                "offset": 0,
-            }
+        url = f"{base_url}/1/user/-/ecg/list.json"
+        params: dict[str, Any] = {
+            "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
+            "sort": "asc",
+            "limit": 10,
+            "offset": 0,
+        }
 
-            while url:
-                ecg_response = client.make_request(url, params=params)
+        while url:
+            ecg_response = client.make_request(url, params=params)
 
-                if ecg_response and "ecgReadings" in ecg_response:
-                    results.extend(self._parse_fitbit_ecg_readings(ecg_response["ecgReadings"], primary_device_id))
+            if ecg_response and "ecgReadings" in ecg_response:
+                results.extend(self._parse_fitbit_ecg_readings(ecg_response["ecgReadings"], primary_device_id))
 
-                # Follow pagination "next" link if present
-                next_url = ecg_response.get("pagination", {}).get("next", "") if ecg_response else ""
-                if next_url:
-                    url = next_url
-                    params = {}  # next URL includes all params
-                else:
-                    url = ""
-
-        except Exception as e:
-            self.logger.warning(f"Failed to fetch ECG data: {e}")
+            # Follow pagination "next" link if present
+            next_url = ecg_response.get("pagination", {}).get("next", "") if ecg_response else ""
+            if next_url:
+                url = next_url
+                params = {}  # next URL includes all params
+            else:
+                url = ""
 
         return results
 
