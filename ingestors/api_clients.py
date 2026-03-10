@@ -320,6 +320,7 @@ class UnifiedHealthDataClient:
                         signal_body = signal_data.get("body", {})
                         record["waveform_samples"] = signal_body.get("signal", [])
                         record["sampling_frequency"] = signal_body.get("sampling_frequency", 500)
+                        record["wear_position"] = signal_body.get("wearposition")
                         self.logger.info(
                             f"Fetched ECG signal {signal_id}: "
                             f"{len(record['waveform_samples'])} samples at {record['sampling_frequency']} Hz"

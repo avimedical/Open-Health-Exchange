@@ -238,7 +238,12 @@ class WithingsHealthDataManager(BaseHealthDataManager):
                 for measurement in raw_data:
                     heart_rate = measurement.get("heart_rate")
                     afib_result = measurement.get("afib_result")
-                    waveform_samples = measurement.get("waveform_samples", [])
+                    raw_samples = measurement.get("waveform_samples", [])
+                    # wearposition=2 means right wrist: the lead polarity is reversed relative to
+                    # standard ECG convention, so the signal must be negated for correct display.
+                    # wearposition=1 (left wrist) and unknown positions are left as-is.
+                    wear_position = measurement.get("wear_position")
+                    waveform_samples = [-s for s in raw_samples] if wear_position == 2 else raw_samples
                     sampling_freq = measurement.get("sampling_frequency", 500)
 
                     # Map Withings afib int (0=normal, 1=afib, 2=inconclusive) to classification keys
