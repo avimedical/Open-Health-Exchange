@@ -1,0 +1,109 @@
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["*_original.py", "*_backup.py"]
+
+[tool.ruff.lint]
+# Enable pycodestyle (E, W), Pyflakes (F), isort (I), and more
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "PIE", "T20", "Q"]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "DTZ001",  # datetime() without tzinfo in tests - acceptable for mocking
+    "B904",  # Exception chaining - TODO: add proper exception chaining
+    "N806",  # Variable User in function - Django pattern for get_user_model()
+    "B017",  # pytest.raises(Exception) is acceptable in tests
+    "PIE796",  # Duplicate enum values intentional for battery levels
+]
+
+[tool.ruff.format]
+# Use Black-compatible formatting
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["base", "ingestors", "transformers", "publishers", "metrics", "webhooks"]
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "open_health_exchange.settings"
+
+[tool.poetry]
+name = "Open Health Exchange"
+version = "1.0.0"
+description = "Python based middleware to sync mobile health data to FHIR-based EHRs"
+authors = ["avi tech GmbH <engineering@avimedical.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.14,<4.0.0"
+djangorestframework = "^3.16.0"
+daphne = "^4.0.0"
+huey = "^2.5.2"
+redis = "^6.0"
+fhirpy = "^2.0.15"
+python-social-auth = {extras = ["django"], version = "^0.3.6"}
+fitbit = "^0.3.1"
+django = "^5.2.0"
+dj-database-url = "^3.0"
+psycopg2-binary = "^2.9.10"
+mozilla-django-oidc = "^4.0.1"
+django-oauth-toolkit = "^3.0.1"
+django-redis = "^6.0.0"
+django-stubs = {extras = ["compatible-mypy"], version = "^5.2.5"}
+prometheus-client = "^0.21.0"
+ruff = "^0.14.0"
+python-dotenv = "^1.0.1"
+sentry-sdk = {extras = ["django", "huey"], version = "^2.0"}
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.14.0"
+pytest = "^8.3.0"
+pytest-django = "^4.9.0"
+pytest-cov = "^6.0"
+responses = "^0.25"
+types-requests = "^2.32.4.20250913"
+pre-commit = "^4.3.0"
+commitizen = "^4.9.1"
+freezegun = "^1.5.5"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "open_health_exchange.settings"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+
+[tool.coverage.run]
+source = ["."]
+omit = ["*/tests/*", "*/migrations/*", "manage.py", "*/settings.py", "conftest.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = true
+# Conventional Commits types (https://www.conventionalcommits.org/)
+# feat: A new feature
+# fix: A bug fix (including hotfixes)
+# docs: Documentation only changes
+# style: Changes that don't affect code meaning (formatting, etc.)
+# refactor: Code change that neither fixes a bug nor adds a feature
+# perf: Performance improvement
+# test: Adding missing tests or correcting existing tests
+# build: Changes to build system or dependencies
+# ci: Changes to CI configuration files and scripts
+# chore: Other changes that don't modify src or test files
+# revert: Reverts a previous commit
+
+[build-system]
+requires = ["setuptools>=40.8.0", "wheel"]
+build-backend = "setuptools.build_meta"

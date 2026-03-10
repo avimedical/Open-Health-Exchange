@@ -1,0 +1,67 @@
+{
+  "resourceType": "Observation",
+  "id": "withings-temperature-20240924-070000",
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "8310-5",
+        "display": "Body temperature"
+      }
+    ],
+    "text": "Body temperature"
+  },
+  "subject": {
+    "reference": "Patient/9f99f236-82f0-4fc9-a223-cf78330d64e2"
+  },
+  "effectiveDateTime": "2024-09-24T07:00:00Z",
+  "device": {
+    "reference": "Device/withings-thermo-44556"
+  },
+  "valueQuantity": {
+    "value": 36.8,
+    "unit": "celsius",
+    "system": "http://unitsofmeasure.org",
+    "code": "Cel"
+  },
+  "identifier": [
+    {
+      "use": "secondary",
+      "system": "https://api.withings.com/health-data",
+      "value": "temperature_2024-09-24T07:00:00_9f99f236-82f0-4fc9-a223-cf78330d64e2"
+    }
+  ],
+  "meta": {
+    "source": "#withings",
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+        "code": "auto-generated",
+        "display": "Auto-generated"
+      },
+      {
+        "system": "https://open-health-exchange.com/provider",
+        "code": "withings",
+        "display": "Withings"
+      }
+    ]
+  },
+  "note": [
+    {
+      "time": "2024-09-24T14:30:21Z",
+      "text": "Synced from Withings Health Platform. Metadata: {\"measurement_method\": \"temporal_artery\", \"ambient_temperature\": 22.5, \"measurement_quality\": \"good\"}"
+    }
+  ]
+}
