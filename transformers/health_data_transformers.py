@@ -4,7 +4,7 @@ Now inherits from BaseFHIRTransformer to eliminate duplication
 """
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from django.utils import timezone
 
@@ -41,8 +41,8 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
     def transform(
         self, record: HealthDataRecord, patient_reference: str, device_reference: str | None = None
-    ) -> dict[str, Any]:
-        """Implementation of abstract transform method from BaseFHIRTransformer"""
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Implementation of abstract transform method from BaseFHIRTransformer."""
         return self.transform_health_record(record, patient_reference, device_reference)
 
     # _safe_float removed - now using unified safe_convert_value from base class
@@ -51,15 +51,19 @@ class HealthDataTransformer(BaseFHIRTransformer):
 
     def transform_health_record(
         self, record: HealthDataRecord, patient_reference: str, device_reference: str | None = None
-    ) -> dict[str, Any]:
-        """Transform a health data record to FHIR Observation"""
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Transform a health data record to FHIR Observation(s).
+
+        Returns a single dict for most data types, or a list of dicts for ECG
+        in legacy mode (ECG observation + linked HR observation).
+        """
 
         # Use specialized ECG transformer for ECG data
         if record.data_type == HealthDataType.ECG:
-            return cast(
-                dict[str, Any],
-                self.ecg_transformer.transform_ecg_to_fhir_panel(record, patient_reference, device_reference),
+            result: dict[str, Any] | list[dict[str, Any]] = self.ecg_transformer.transform_ecg_to_fhir_panel(
+                record, patient_reference, device_reference
             )
+            return result
 
         # Get FHIR codes and mappings for non-ECG data
         # Use LOINC override if available (e.g., steps: 41950-7 for inwithings compatibility)
@@ -537,11 +541,14 @@ class HealthDataTransformer(BaseFHIRTransformer):
         for record in records:
             try:
                 observation = self.transform_health_record(record, patient_reference, device_reference)
-                observations.append(observation)
+                if isinstance(observation, list):
+                    observations.extend(observation)
+                else:
+                    observations.append(observation)
             except Exception as e:
                 logger.error(f"Error transforming health record {record.data_type} for {record.user_id}: {e}")
 
-        logger.info(f"Transformed {len(observations)} health records to FHIR Observations")
+        logger.info(f"Transformed {len(records)} health records to {len(observations)} FHIR Observations")
         return observations
 
 
@@ -622,8 +629,8 @@ class HealthDataBundle:
 # Convenience functions for backward compatibility
 def transform_health_record(
     record: HealthDataRecord, patient_reference: str, device_reference: str | None = None
-) -> dict[str, Any]:
-    """Transform a single health data record to FHIR Observation"""
+) -> dict[str, Any] | list[dict[str, Any]]:
+    """Transform a single health data record to FHIR Observation(s)"""
     transformer = HealthDataTransformer()
     return transformer.transform_health_record(record, patient_reference, device_reference)
 

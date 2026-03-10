@@ -224,8 +224,8 @@ class TestWithingsHealthDataManager:
         assert records[0].data_type == HealthDataType.BLOOD_PRESSURE
         assert records[0].unit == "mmHg"
 
-    def test_fetch_health_data_ecg(self, manager):
-        """Test fetching ECG data."""
+    def test_fetch_health_data_ecg_left_wrist(self, manager):
+        """Test fetching ECG data worn on left wrist (wearposition=1): signal kept as-is."""
         mock_client = MagicMock()
         mock_client.get_health_data.return_value = [
             {
@@ -241,6 +241,9 @@ class TestWithingsHealthDataManager:
                 "pr_interval": 160,
                 "qt_interval": 400,
                 "qtc_interval": 410,
+                "waveform_samples": [-57, -62, -66, -71, 34],
+                "wear_position": 1,
+                "sampling_frequency": 500,
                 "measurement_source": MeasurementSource.DEVICE,
             }
         ]
@@ -260,9 +263,49 @@ class TestWithingsHealthDataManager:
 
         assert len(records) == 1
         assert records[0].data_type == HealthDataType.ECG
-        assert records[0].unit == "uV"
-        assert records[0].value["heart_rate"] == 72
-        assert records[0].value["signal_id"] == 12345
+        assert records[0].unit == "bpm"
+        assert records[0].value == 72.0
+        assert records[0].metadata["ecg_metrics"]["result_classification"] == "NEGATIVE"
+        assert records[0].metadata["ecg_metrics"]["signal_id"] == 12345
+        assert records[0].metadata["waveform_data"]["samples"] == [-57, -62, -66, -71, 34]
+        assert records[0].metadata["waveform_data"]["sampling_frequency_hz"] == 500
+
+    def test_fetch_health_data_ecg_right_wrist(self, manager):
+        """Test fetching ECG data worn on right wrist (wearposition=2): signal negated for correct display."""
+        mock_client = MagicMock()
+        mock_client.get_health_data.return_value = [
+            {
+                "timestamp": datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
+                "heart_rate": 72,
+                "signal_id": 12345,
+                "afib_result": 0,
+                "afib_classification": "Normal sinus rhythm",
+                "device_id": "ecg-123",
+                "device_model": 94,
+                "modified": datetime(2024, 1, 15, 10, 31, 0, tzinfo=UTC),
+                "waveform_samples": [-57, -62, -66, -71, 34],
+                "wear_position": 2,
+                "sampling_frequency": 500,
+                "measurement_source": MeasurementSource.DEVICE,
+            }
+        ]
+
+        date_range = DateRange(
+            start=datetime(2024, 1, 15, tzinfo=UTC),
+            end=datetime(2024, 1, 16, tzinfo=UTC),
+        )
+
+        with patch("ingestors.health_data_manager.get_unified_health_data_client", return_value=mock_client):
+            records = manager.fetch_health_data(
+                user_id="test-user",
+                data_types=[HealthDataType.ECG],
+                date_range=date_range,
+                sync_trigger=SyncTrigger.WEBHOOK,
+            )
+
+        assert len(records) == 1
+        assert records[0].metadata["waveform_data"]["samples"] == [57, 62, 66, 71, -34]
+        assert records[0].metadata["waveform_data"]["sampling_frequency_hz"] == 500
 
     def test_fetch_health_data_temperature(self, manager):
         """Test fetching temperature data."""
