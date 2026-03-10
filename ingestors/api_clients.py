@@ -1193,11 +1193,11 @@ class UnifiedHealthDataClient:
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        start_date = query.date_range.start.strftime("%Y-%m-%d")
-        end_date = query.date_range.end.strftime("%Y-%m-%d")
+        is_intraday = getattr(settings, "FITBIT_INTRADAY_HRV_ENABLED", False)
+        raw_hrv_entries = []
 
         try:
-            if getattr(settings, "FITBIT_INTRADAY_HRV_ENABLED", False):
+            if is_intraday:
                 # Fitbit's intraday HRV endpoint only supports a maximum 30-day range
                 MAX_INTRADAY_HRV_DAYS = 30
                 start_dt = query.date_range.start.date()
@@ -1228,74 +1228,65 @@ class UnifiedHealthDataClient:
                     hrv_response = client.make_request(url)
 
                     if hrv_response and "hrv" in hrv_response:
-                        for hrv_entry in hrv_response["hrv"]:
-                            minute_str = hrv_entry.get("minute", "")
-
-                            try:
-                                hrv_timestamp = dateparse.parse_datetime(minute_str)
-                                if hrv_timestamp:
-                                    hrv_timestamp = (
-                                        hrv_timestamp.astimezone(UTC)
-                                        if hrv_timestamp.tzinfo
-                                        else hrv_timestamp.replace(tzinfo=UTC)
-                                    )
-                                else:
-                                    hrv_timestamp = django_timezone.now()
-                            except (ValueError, TypeError):
-                                hrv_timestamp = django_timezone.now()
-
-                            rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
-
-                            if rmssd > 0:
-                                results.append(
-                                    {
-                                        "timestamp": hrv_timestamp,
-                                        "value": rmssd,
-                                        "unit": "ms",
-                                        "device_id": primary_device_id,
-                                        "measurement_source": MeasurementSource.DEVICE,
-                                        "hrv_metrics": {
-                                            "rmssd": rmssd,
-                                            "coverage": hrv_entry.get("value", {}).get("coverage", 0),
-                                            "hf": hrv_entry.get("value", {}).get("hf", 0),
-                                            "lf": hrv_entry.get("value", {}).get("lf", 0),
-                                        },
-                                    }
-                                )
+                        raw_hrv_entries.extend(hrv_response["hrv"])
 
                     current_start = current_end + timedelta(days=1)
             else:
-                url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}.json"
+                start_str = query.date_range.start.strftime("%Y-%m-%d")
+                end_str = query.date_range.end.strftime("%Y-%m-%d")
+                url = f"{base_url}/1/user/-/hrv/date/{start_str}/{end_str}.json"
                 hrv_response = client.make_request(url)
 
                 if hrv_response and "hrv" in hrv_response:
-                    for hrv_entry in hrv_response["hrv"]:
-                        date_str = hrv_entry.get("dateTime", "")
+                    raw_hrv_entries.extend(hrv_response["hrv"])
 
-                        try:
-                            parsed_date = dateparse.parse_date(date_str)
-                            if parsed_date:
-                                hrv_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
-                            else:
-                                hrv_timestamp = django_timezone.now()
-                        except (ValueError, TypeError):
-                            hrv_timestamp = django_timezone.now()
-
-                        rmssd = hrv_entry.get("value", {}).get("dailyRmssd", 0)
-
-                        if rmssd > 0:
-                            results.append(
-                                {
-                                    "timestamp": hrv_timestamp,
-                                    "value": rmssd,
-                                    "unit": "ms",
-                                    "device_id": primary_device_id,
-                                    "measurement_source": MeasurementSource.DEVICE,
-                                    "hrv_metrics": {
-                                        "rmssd": rmssd,
-                                    },
-                                }
+            # Unify parsing logic for both intraday and summary responses
+            for hrv_entry in raw_hrv_entries:
+                try:
+                    if is_intraday:
+                        time_str = hrv_entry.get("minute", "")
+                        parsed_time = dateparse.parse_datetime(time_str)
+                        if parsed_time:
+                            hrv_timestamp = (
+                                parsed_time.astimezone(UTC) if parsed_time.tzinfo else parsed_time.replace(tzinfo=UTC)
                             )
+                        else:
+                            hrv_timestamp = django_timezone.now()
+                    else:
+                        date_str = hrv_entry.get("dateTime", "")
+                        parsed_date = dateparse.parse_date(date_str)
+                        if parsed_date:
+                            hrv_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+                        else:
+                            hrv_timestamp = django_timezone.now()
+                except (ValueError, TypeError):
+                    hrv_timestamp = django_timezone.now()
+
+                value_dict = hrv_entry.get("value", {})
+                rmssd = value_dict.get("rmssd", 0) if is_intraday else value_dict.get("dailyRmssd", 0)
+
+                if rmssd > 0:
+                    metrics = {"rmssd": rmssd}
+                    if is_intraday:
+                        metrics.update(
+                            {
+                                "coverage": value_dict.get("coverage", 0),
+                                "hf": value_dict.get("hf", 0),
+                                "lf": value_dict.get("lf", 0),
+                            }
+                        )
+
+                    results.append(
+                        {
+                            "timestamp": hrv_timestamp,
+                            "value": rmssd,
+                            "unit": "ms",
+                            "device_id": primary_device_id,
+                            "measurement_source": MeasurementSource.DEVICE,
+                            "hrv_metrics": metrics,
+                        }
+                    )
+
         except Exception as e:
             self.logger.warning(f"Failed to fetch HRV (RMSSD) data from Fitbit: {e}")
 
