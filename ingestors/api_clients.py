@@ -1198,44 +1198,72 @@ class UnifiedHealthDataClient:
 
         try:
             if getattr(settings, "FITBIT_INTRADAY_HRV_ENABLED", False):
-                url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}/all.json"
-                hrv_response = client.make_request(url)
+                # Fitbit's intraday HRV endpoint only supports a maximum 30-day range
+                MAX_INTRADAY_HRV_DAYS = 30
+                start_dt = query.date_range.start.date()
+                end_dt = query.date_range.end.date()
 
-                if hrv_response and "hrv" in hrv_response:
-                    for hrv_entry in hrv_response["hrv"]:
-                        minute_str = hrv_entry.get("minute", "")
+                total_days = (end_dt - start_dt).days + 1
+                if total_days > MAX_INTRADAY_HRV_DAYS:
+                    self.logger.warning(
+                        "Requested Fitbit intraday HRV range %s to %s spans %d days; "
+                        "splitting into %d-day chunks to respect endpoint limits.",
+                        start_dt,
+                        end_dt,
+                        total_days,
+                        MAX_INTRADAY_HRV_DAYS,
+                    )
 
-                        try:
-                            hrv_timestamp = dateparse.parse_datetime(minute_str)
-                            if hrv_timestamp:
-                                hrv_timestamp = (
-                                    hrv_timestamp.astimezone(UTC)
-                                    if hrv_timestamp.tzinfo
-                                    else hrv_timestamp.replace(tzinfo=UTC)
-                                )
-                            else:
+                current_start = start_dt
+                while current_start <= end_dt:
+                    current_end = min(
+                        current_start + timedelta(days=MAX_INTRADAY_HRV_DAYS - 1),
+                        end_dt,
+                    )
+
+                    current_start_str = current_start.strftime("%Y-%m-%d")
+                    current_end_str = current_end.strftime("%Y-%m-%d")
+
+                    url = f"{base_url}/1/user/-/hrv/date/{current_start_str}/{current_end_str}/all.json"
+                    hrv_response = client.make_request(url)
+
+                    if hrv_response and "hrv" in hrv_response:
+                        for hrv_entry in hrv_response["hrv"]:
+                            minute_str = hrv_entry.get("minute", "")
+
+                            try:
+                                hrv_timestamp = dateparse.parse_datetime(minute_str)
+                                if hrv_timestamp:
+                                    hrv_timestamp = (
+                                        hrv_timestamp.astimezone(UTC)
+                                        if hrv_timestamp.tzinfo
+                                        else hrv_timestamp.replace(tzinfo=UTC)
+                                    )
+                                else:
+                                    hrv_timestamp = django_timezone.now()
+                            except (ValueError, TypeError):
                                 hrv_timestamp = django_timezone.now()
-                        except (ValueError, TypeError):
-                            hrv_timestamp = django_timezone.now()
 
-                        rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
+                            rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
 
-                        if rmssd > 0:
-                            results.append(
-                                {
-                                    "timestamp": hrv_timestamp,
-                                    "value": rmssd,
-                                    "unit": "ms",
-                                    "device_id": primary_device_id,
-                                    "measurement_source": MeasurementSource.DEVICE,
-                                    "hrv_metrics": {
-                                        "rmssd": rmssd,
-                                        "coverage": hrv_entry.get("value", {}).get("coverage", 0),
-                                        "hf": hrv_entry.get("value", {}).get("hf", 0),
-                                        "lf": hrv_entry.get("value", {}).get("lf", 0),
-                                    },
-                                }
-                            )
+                            if rmssd > 0:
+                                results.append(
+                                    {
+                                        "timestamp": hrv_timestamp,
+                                        "value": rmssd,
+                                        "unit": "ms",
+                                        "device_id": primary_device_id,
+                                        "measurement_source": MeasurementSource.DEVICE,
+                                        "hrv_metrics": {
+                                            "rmssd": rmssd,
+                                            "coverage": hrv_entry.get("value", {}).get("coverage", 0),
+                                            "hf": hrv_entry.get("value", {}).get("hf", 0),
+                                            "lf": hrv_entry.get("value", {}).get("lf", 0),
+                                        },
+                                    }
+                                )
+
+                    current_start = current_end + timedelta(days=1)
             else:
                 url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}.json"
                 hrv_response = client.make_request(url)
@@ -1269,7 +1297,7 @@ class UnifiedHealthDataClient:
                                 }
                             )
         except Exception as e:
-            self.logger.warning(f"Failed to fetch HRV/RR intervals data from Fitbit: {e}")
+            self.logger.warning(f"Failed to fetch HRV (RMSSD) data from Fitbit: {e}")
 
         return results
 

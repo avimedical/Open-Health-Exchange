@@ -130,7 +130,11 @@ class TestDevicePublisherBatch:
 
     def test_publish_devices_batch_all_success(self, publisher, multiple_devices):
         """Test batch publication when all devices succeed."""
-        publisher.transformer.transform.return_value = {"resourceType": "Device", "id": "fhir-device"}
+        publisher.transformer.transform.side_effect = [
+            {"resourceType": "Device", "id": "fhir-device-1"},
+            {"resourceType": "Device", "id": "fhir-device-2"},
+            {"resourceType": "Device", "id": "fhir-device-3"},
+        ]
         publisher.fhir_client.update_resource.side_effect = [
             {"id": "fhir-device-1"},
             {"id": "fhir-device-2"},
@@ -143,9 +147,19 @@ class TestDevicePublisherBatch:
         assert len(errors) == 0
         assert publisher.fhir_client.update_resource.call_count == 3
 
+        # Verify update_resource was called with correct IDs
+        calls = publisher.fhir_client.update_resource.call_args_list
+        assert calls[0].args[1] == "fhir-device-1"
+        assert calls[1].args[1] == "fhir-device-2"
+        assert calls[2].args[1] == "fhir-device-3"
+
     def test_publish_devices_batch_partial_failure(self, publisher, multiple_devices):
         """Test batch publication with partial failures."""
-        publisher.transformer.transform.return_value = {"resourceType": "Device", "id": "fhir-device"}
+        publisher.transformer.transform.side_effect = [
+            {"resourceType": "Device", "id": "fhir-device-1"},
+            {"resourceType": "Device", "id": "fhir-device-2"},
+            {"resourceType": "Device", "id": "fhir-device-3"},
+        ]
         publisher.fhir_client.update_resource.side_effect = [
             {"id": "fhir-device-1"},
             Exception("FHIR error for device-2"),
@@ -157,6 +171,12 @@ class TestDevicePublisherBatch:
         assert len(successful) == 2
         assert len(errors) == 1
         assert "FHIR error for device-2" in str(errors[0])
+
+        # Verify update_resource was called with correct IDs
+        calls = publisher.fhir_client.update_resource.call_args_list
+        assert calls[0].args[1] == "fhir-device-1"
+        assert calls[1].args[1] == "fhir-device-2"
+        assert calls[2].args[1] == "fhir-device-3"
 
     def test_publish_devices_batch_all_failures(self, publisher, multiple_devices):
         """Test batch publication when all devices fail."""
