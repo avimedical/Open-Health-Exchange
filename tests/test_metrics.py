@@ -114,7 +114,10 @@ class TestMetricsCollector:
 
     def test_update_system_metrics(self, collector):
         """Test updating system metrics doesn't raise errors."""
-        with patch("django_redis.get_redis_connection"):
+        with (
+            patch("django_redis.get_redis_connection"),
+            patch("metrics.collectors.settings.HUEY.pending_count", return_value=0),
+        ):
             collector.update_system_metrics()
 
 
