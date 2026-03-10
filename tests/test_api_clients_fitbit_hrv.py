@@ -1,4 +1,4 @@
-from datetime import UTC, timedelta
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
@@ -8,8 +8,6 @@ from ingestors.api_clients import DataQuery, FitbitClient, UnifiedHealthDataClie
 from ingestors.constants import Provider
 from ingestors.health_data_constants import HealthDataType
 from ingestors.health_sync_strategies import DateRange
-
-UTC = UTC
 
 
 @pytest.fixture
