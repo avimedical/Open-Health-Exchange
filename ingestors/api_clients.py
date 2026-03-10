@@ -165,7 +165,15 @@ class UnifiedHealthDataClient:
             return {query.cache_key: [] for query in queries}
 
     def _fetch_provider_data(self, provider: Provider, queries: list[DataQuery]) -> dict[str, list[dict[str, Any]]]:
-        """Fetch data for all queries from a specific provider"""
+        """Fetch data for all queries from a specific provider.
+
+        This is the designated error boundary for all per-query data fetching.
+        Individual _fetch_* methods are expected to let exceptions propagate here
+        so that error metrics are recorded correctly and the remaining queries in
+        the batch still execute. Swallowing exceptions inside a _fetch_* method
+        would cause this layer to record a success (with 0 data points) instead
+        of an error, making silent failures invisible in Prometheus.
+        """
         results = {}
 
         for query in queries:
@@ -312,6 +320,7 @@ class UnifiedHealthDataClient:
                         signal_body = signal_data.get("body", {})
                         record["waveform_samples"] = signal_body.get("signal", [])
                         record["sampling_frequency"] = signal_body.get("sampling_frequency", 500)
+                        record["wear_position"] = signal_body.get("wearposition")
                         self.logger.info(
                             f"Fetched ECG signal {signal_id}: "
                             f"{len(record['waveform_samples'])} samples at {record['sampling_frequency']} Hz"
@@ -1157,80 +1166,138 @@ class UnifiedHealthDataClient:
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        try:
-            url = f"{base_url}/1/user/-/ecg/list.json"
-            params: dict[str, Any] = {
-                "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
-                "sort": "asc",
-                "limit": 10,
-                "offset": 0,
-            }
+        url = f"{base_url}/1/user/-/ecg/list.json"
+        params: dict[str, Any] = {
+            "afterDate": query.date_range.start.strftime("%Y-%m-%d"),
+            "sort": "asc",
+            "limit": 10,
+            "offset": 0,
+        }
 
-            while url:
-                ecg_response = client.make_request(url, params=params)
+        while url:
+            ecg_response = client.make_request(url, params=params)
 
-                if ecg_response and "ecgReadings" in ecg_response:
-                    results.extend(self._parse_fitbit_ecg_readings(ecg_response["ecgReadings"], primary_device_id))
+            if ecg_response and "ecgReadings" in ecg_response:
+                results.extend(self._parse_fitbit_ecg_readings(ecg_response["ecgReadings"], primary_device_id))
 
-                # Follow pagination "next" link if present
-                next_url = ecg_response.get("pagination", {}).get("next", "") if ecg_response else ""
-                if next_url:
-                    url = next_url
-                    params = {}  # next URL includes all params
-                else:
-                    url = ""
-
-        except Exception as e:
-            self.logger.warning(f"Failed to fetch ECG data: {e}")
+            # Follow pagination "next" link if present
+            next_url = ecg_response.get("pagination", {}).get("next", "") if ecg_response else ""
+            if next_url:
+                url = next_url
+                params = {}  # next URL includes all params
+            else:
+                url = ""
 
         return results
 
     def _fetch_fitbit_hrv(
         self, client: FitbitClient, query: DataQuery, user_devices: dict[str, str]
     ) -> list[dict[str, Any]]:
-        """Fetch Fitbit HRV intraday data using date-range endpoint (max 30 days, 5-min granularity)"""
+        """Fetch Fitbit HRV data, either intraday or summary depending on settings."""
         results = []
         primary_device_id = self._get_primary_fitbit_device(user_devices)
         base_url = self.config["ENDPOINTS"]["fitbit"]["base_url"]
 
-        start_date = query.date_range.start.strftime("%Y-%m-%d")
-        end_date = query.date_range.end.strftime("%Y-%m-%d")
-        url = f"{base_url}/1/user/-/hrv/date/{start_date}/{end_date}/all.json"
-        hrv_response = client.make_request(url)
+        is_intraday = getattr(settings, "FITBIT_INTRADAY_HRV_ENABLED", False)
+        raw_hrv_entries = []
 
-        if hrv_response and "hrv" in hrv_response:
-            for hrv_entry in hrv_response["hrv"]:
-                minute_str = hrv_entry.get("minute", "")
+        if is_intraday:
+            # Fitbit's intraday HRV endpoint only supports a maximum 30-day range
+            MAX_INTRADAY_HRV_DAYS = 30
+            start_dt = query.date_range.start.date()
+            end_dt = query.date_range.end.date()
 
-                try:
-                    hrv_timestamp = dateparse.parse_datetime(minute_str)
-                    if hrv_timestamp:
+            total_days = (end_dt - start_dt).days + 1
+            if total_days > MAX_INTRADAY_HRV_DAYS:
+                self.logger.warning(
+                    "Requested Fitbit intraday HRV range %s to %s spans %d days; "
+                    "splitting into %d-day chunks to respect endpoint limits.",
+                    start_dt,
+                    end_dt,
+                    total_days,
+                    MAX_INTRADAY_HRV_DAYS,
+                )
+
+            current_start = start_dt
+            while current_start <= end_dt:
+                current_end = min(
+                    current_start + timedelta(days=MAX_INTRADAY_HRV_DAYS - 1),
+                    end_dt,
+                )
+
+                current_start_str = current_start.strftime("%Y-%m-%d")
+                current_end_str = current_end.strftime("%Y-%m-%d")
+
+                url = f"{base_url}/1/user/-/hrv/date/{current_start_str}/{current_end_str}/all.json"
+
+                # Rate limit is already checked once per query in _fetch_provider_data.
+                # Only check again for subsequent chunks in this loop to avoid double-counting the first request.
+                if current_start > start_dt:
+                    self._check_rate_limit(Provider.FITBIT, query.user_id)
+                hrv_response = client.make_request(url)
+
+                if hrv_response and "hrv" in hrv_response:
+                    raw_hrv_entries.extend(hrv_response["hrv"])
+
+                current_start = current_end + timedelta(days=1)
+        else:
+            start_str = query.date_range.start.strftime("%Y-%m-%d")
+            end_str = query.date_range.end.strftime("%Y-%m-%d")
+            url = f"{base_url}/1/user/-/hrv/date/{start_str}/{end_str}.json"
+
+            # Rate limit is already checked once per query in _fetch_provider_data.
+            # No need to check again for this single request.
+            hrv_response = client.make_request(url)
+
+            if hrv_response and "hrv" in hrv_response:
+                raw_hrv_entries.extend(hrv_response["hrv"])
+
+        # Unify parsing logic for both intraday and summary responses
+        for hrv_entry in raw_hrv_entries:
+            try:
+                if is_intraday:
+                    time_str = hrv_entry.get("minute", "")
+                    parsed_time = dateparse.parse_datetime(time_str)
+                    if parsed_time:
                         hrv_timestamp = (
-                            hrv_timestamp.astimezone(UTC) if hrv_timestamp.tzinfo else hrv_timestamp.replace(tzinfo=UTC)
+                            parsed_time.astimezone(UTC) if parsed_time.tzinfo else parsed_time.replace(tzinfo=UTC)
                         )
                     else:
                         hrv_timestamp = django_timezone.now()
-                except (ValueError, TypeError):
-                    hrv_timestamp = django_timezone.now()
+                else:
+                    date_str = hrv_entry.get("dateTime", "")
+                    parsed_date = dateparse.parse_date(date_str)
+                    if parsed_date:
+                        hrv_timestamp = datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+                    else:
+                        hrv_timestamp = django_timezone.now()
+            except (ValueError, TypeError):
+                hrv_timestamp = django_timezone.now()
 
-                rmssd = hrv_entry.get("value", {}).get("rmssd", 0)
+            value_dict = hrv_entry.get("value", {})
+            rmssd = value_dict.get("rmssd", 0) if is_intraday else value_dict.get("dailyRmssd", 0)
 
-                if rmssd > 0:
-                    results.append(
+            if rmssd > 0:
+                metrics = {"rmssd": rmssd}
+                if is_intraday:
+                    metrics.update(
                         {
-                            "timestamp": hrv_timestamp,
-                            "value": rmssd,
-                            "unit": "ms",
-                            "device_id": primary_device_id,
-                            "measurement_source": MeasurementSource.DEVICE,
-                            "hrv_metrics": {
-                                "rmssd": rmssd,
-                                "coverage": hrv_entry.get("value", {}).get("coverage", 0),
-                                "hf": hrv_entry.get("value", {}).get("hf", 0),
-                                "lf": hrv_entry.get("value", {}).get("lf", 0),
-                            },
+                            "coverage": value_dict.get("coverage", 0),
+                            "hf": value_dict.get("hf", 0),
+                            "lf": value_dict.get("lf", 0),
                         }
                     )
+
+                results.append(
+                    {
+                        "timestamp": hrv_timestamp,
+                        "value": rmssd,
+                        "unit": "ms",
+                        "device_id": primary_device_id,
+                        "measurement_source": MeasurementSource.DEVICE,
+                        "hrv_metrics": metrics,
+                    }
+                )
 
         return results
 

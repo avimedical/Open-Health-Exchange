@@ -165,15 +165,20 @@ SOCIAL_AUTH_FITBIT_KEY = os.environ.get("FITBIT_CLIENT_ID")
 SOCIAL_AUTH_FITBIT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
 SOCIAL_AUTH_FITBIT_SCOPE = [
     "activity",
+    "electrocardiogram",
     "heartrate",
     "location",
     "nutrition",
     "profile",
+    "respiratory_rate",
     "settings",
     "sleep",
     "social",
     "weight",
 ]
+
+# Fitbit API settings
+FITBIT_INTRADAY_HRV_ENABLED = os.environ.get("FITBIT_INTRADAY_HRV_ENABLED", "False").lower() == "true"
 
 # Fitbit Subscription Configuration
 # The Subscriber ID is configured in the Fitbit Developer Portal under your app's settings
