@@ -85,8 +85,6 @@ class DeviceManager:
             )
         except AuthenticationError:
             raise
-        except UserSocialAuth.DoesNotExist:
-            raise AuthenticationError(f"No {self.provider} credentials for user {user_id}")
         except KeyError as e:
             raise AuthenticationError(f"Missing credential field: {e}")
 

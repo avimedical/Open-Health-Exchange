@@ -32,6 +32,9 @@ RUN poetry config virtualenvs.create false \
 # Copy application code
 COPY . /app
 
+# Collect static files for WhiteNoise (must run before switching to non-root user)
+RUN python manage.py collectstatic --noinput
+
 # Expose default port
 EXPOSE 8000
 

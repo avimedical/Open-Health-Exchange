@@ -846,15 +846,15 @@ class TestUnlinkProvider:
             # UserSocialAuth is imported inside the function from social_django.models
             with patch("social_django.models.UserSocialAuth") as mock_social_model:
                 mock_social_model.DoesNotExist = Exception
-                mock_queryset = MagicMock()
-                mock_queryset.exists.return_value = True
-                mock_social_model.objects.filter.return_value = mock_queryset
+                mock_social_model.objects.filter.return_value.delete.return_value = (
+                    1,
+                    {"social_django.UserSocialAuth": 1},
+                )
 
                 response = unlink_provider(request, "withings")
 
         assert response.status_code == 200
         assert response.data["status"] == "unlinked"
-        mock_queryset.delete.assert_called_once()
 
     def test_unlink_no_connection_found(self, factory):
         """Test unlink returns 404 when no connection exists."""
@@ -872,9 +872,7 @@ class TestUnlinkProvider:
             # UserSocialAuth is imported inside the function
             with patch("social_django.models.UserSocialAuth") as mock_social_model:
                 mock_social_model.DoesNotExist = Exception
-                mock_queryset = MagicMock()
-                mock_queryset.exists.return_value = False
-                mock_social_model.objects.filter.return_value = mock_queryset
+                mock_social_model.objects.filter.return_value.delete.return_value = (0, {})
 
                 with patch("base.views.ProviderLink") as mock_link_model:
                     mock_link_model.objects.filter.return_value.first.return_value = None
@@ -901,9 +899,7 @@ class TestUnlinkProvider:
             # UserSocialAuth is imported inside the function
             with patch("social_django.models.UserSocialAuth") as mock_social_model:
                 mock_social_model.DoesNotExist = Exception
-                mock_queryset = MagicMock()
-                mock_queryset.exists.return_value = False
-                mock_social_model.objects.filter.return_value = mock_queryset
+                mock_social_model.objects.filter.return_value.delete.return_value = (0, {})
 
                 with patch("base.views.ProviderLink") as mock_link_model:
                     mock_link_model.objects.filter.return_value.first.return_value = mock_orphan_link
