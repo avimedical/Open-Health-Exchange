@@ -205,7 +205,7 @@ class UnifiedHealthDataManager:
         # Extract common Withings fields
         timestamp = raw_item.get("timestamp")
         if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(timestamp)
         elif not isinstance(timestamp, datetime):
             return None
 
@@ -242,7 +242,7 @@ class UnifiedHealthDataManager:
         # Extract common Fitbit fields
         timestamp = raw_item.get("timestamp")
         if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(timestamp)
         elif not isinstance(timestamp, datetime):
             # Try 'date' field for activity data
             date_value = raw_item.get("date")

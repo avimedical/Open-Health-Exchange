@@ -112,30 +112,21 @@ def error_handler(provider: str, operation: str):
     return decorator
 
 
+_ERROR_PATTERNS: dict[ErrorType, list[str]] = {
+    ErrorType.RATE_LIMIT_ERROR: ["rate limit", "429", "too many requests"],
+    ErrorType.AUTH_ERROR: ["401", "unauthorized", "auth", "token", "forbidden", "403"],
+    ErrorType.NETWORK_ERROR: ["timeout", "connection", "network", "dns", "502", "503", "504"],
+    ErrorType.VALIDATION_ERROR: ["validation", "invalid", "bad request", "400"],
+    ErrorType.API_ERROR: ["api", "500", "internal server error"],
+}
+
+
 def _classify_error(exception: Exception) -> ErrorType:
     """Classify exception into error types."""
     error_str = str(exception).lower()
-
-    # Rate limit errors
-    if "rate limit" in error_str or "429" in error_str or "too many requests" in error_str:
-        return ErrorType.RATE_LIMIT_ERROR
-
-    # Authentication errors
-    if any(auth_term in error_str for auth_term in ["401", "unauthorized", "auth", "token", "forbidden", "403"]):
-        return ErrorType.AUTH_ERROR
-
-    # Network errors
-    if any(net_term in error_str for net_term in ["timeout", "connection", "network", "dns", "502", "503", "504"]):
-        return ErrorType.NETWORK_ERROR
-
-    # Validation errors
-    if any(val_term in error_str for val_term in ["validation", "invalid", "bad request", "400"]):
-        return ErrorType.VALIDATION_ERROR
-
-    # API errors
-    if any(api_term in error_str for api_term in ["api", "500", "internal server error"]):
-        return ErrorType.API_ERROR
-
+    for error_type, patterns in _ERROR_PATTERNS.items():
+        if any(p in error_str for p in patterns):
+            return error_type
     return ErrorType.UNKNOWN_ERROR
 
 

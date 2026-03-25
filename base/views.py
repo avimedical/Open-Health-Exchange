@@ -502,17 +502,16 @@ def provider_linking_status(request, provider):
         # Check for existing provider links
         provider_links = ProviderLink.objects.filter(user=target_user, provider__provider_type=provider)
 
-        links_data = []
-        for link in provider_links:
-            links_data.append(
-                {
-                    "provider_name": link.provider.name,
-                    "provider_type": link.provider.provider_type,
-                    "external_user_id": link.external_user_id,
-                    "active": link.provider.active,
-                    "linked_at": link.linked_at.isoformat() if hasattr(link, "linked_at") and link.linked_at else None,
-                }
-            )
+        links_data = [
+            {
+                "provider_name": link.provider.name,
+                "provider_type": link.provider.provider_type,
+                "external_user_id": link.external_user_id,
+                "active": link.provider.active,
+                "linked_at": link.linked_at.isoformat() if hasattr(link, "linked_at") and link.linked_at else None,
+            }
+            for link in provider_links
+        ]
 
         return Response(
             {

@@ -3,7 +3,9 @@ Huey tasks for health data synchronization
 """
 
 import logging
+from dataclasses import asdict
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from django.db import close_old_connections
@@ -21,6 +23,18 @@ from .health_data_service import HealthDataSyncService
 from .health_sync_strategies import SyncStrategy, SyncStrategyFactory
 
 logger = logging.getLogger(__name__)
+
+
+def _result_to_dict(result) -> dict[str, Any]:
+    """Convert a dataclass result to a JSON-serializable dict, converting enums to their values."""
+    return {
+        k: [i.value for i in v]
+        if isinstance(v, list) and v and isinstance(v[0], Enum)
+        else v.value
+        if isinstance(v, Enum)
+        else v
+        for k, v in asdict(result).items()
+    }
 
 
 @HUEY.task(priority=1)  # High priority for real-time sync
@@ -68,8 +82,8 @@ def sync_user_health_data_realtime(
         # Override date range if provided
         if date_range:
             try:
-                start_date = datetime.fromisoformat(date_range["start"].replace("Z", "+00:00"))
-                end_date = datetime.fromisoformat(date_range["end"].replace("Z", "+00:00"))
+                start_date = datetime.fromisoformat(date_range["start"])
+                end_date = datetime.fromisoformat(date_range["end"])
                 custom_range = DateRange(start_date, end_date)
                 sync_strategy = SyncStrategyFactory.create_manual_sync(custom_range)
             except Exception as e:
@@ -90,20 +104,7 @@ def sync_user_health_data_realtime(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        # Convert result to dictionary
-        result_dict = {
-            "user_id": result.user_id,
-            "provider": result.provider.value,
-            "data_types": [dt.value for dt in result.data_types],
-            "trigger": result.trigger.value,
-            "records_fetched": result.records_fetched,
-            "records_transformed": result.records_transformed,
-            "fhir_resources_created": result.fhir_resources_created,
-            "errors": result.errors,
-            "success": result.success,
-            "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms,
-        }
+        result_dict = _result_to_dict(result)
 
         logger.info(f"Real-time health data sync completed for user {user_id}: {result_dict}")
         return result_dict
@@ -175,20 +176,7 @@ def sync_user_health_data_incremental(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        # Convert result to dictionary
-        result_dict = {
-            "user_id": result.user_id,
-            "provider": result.provider.value,
-            "data_types": [dt.value for dt in result.data_types],
-            "trigger": result.trigger.value,
-            "records_fetched": result.records_fetched,
-            "records_transformed": result.records_transformed,
-            "fhir_resources_created": result.fhir_resources_created,
-            "errors": result.errors,
-            "success": result.success,
-            "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms,
-        }
+        result_dict = _result_to_dict(result)
 
         logger.info(f"Incremental health data sync completed for user {user_id}: {result_dict}")
         return result_dict
@@ -263,20 +251,7 @@ def sync_user_health_data_initial(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        # Convert result to dictionary
-        result_dict = {
-            "user_id": result.user_id,
-            "provider": result.provider.value,
-            "data_types": [dt.value for dt in result.data_types],
-            "trigger": result.trigger.value,
-            "records_fetched": result.records_fetched,
-            "records_transformed": result.records_transformed,
-            "fhir_resources_created": result.fhir_resources_created,
-            "errors": result.errors,
-            "success": result.success,
-            "sync_timestamp": result.sync_timestamp,
-            "processing_time_ms": result.processing_time_ms,
-        }
+        result_dict = _result_to_dict(result)
 
         logger.info(f"Initial health data sync completed for user {user_id}: {result_dict}")
         return result_dict
