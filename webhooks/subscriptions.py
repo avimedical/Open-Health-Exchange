@@ -336,15 +336,16 @@ class WebhookSubscriptionManager:
             if response.status_code == 200:
                 result = response.json()
                 if result.get("status") == 0:
-                    for profile in result.get("body", {}).get("profiles", []):
-                        subscription = WebhookSubscription(
+                    subscriptions.extend(
+                        WebhookSubscription(
                             provider=Provider.WITHINGS,
                             user_id=user_id,
-                            callback_url=profile.get("callbackurl"),
-                            data_types=[str(profile.get("appli"))],
+                            callback_url=p.get("callbackurl"),
+                            data_types=[str(p.get("appli"))],
                             is_active=True,
                         )
-                        subscriptions.append(subscription)
+                        for p in result.get("body", {}).get("profiles", [])
+                    )
                 else:
                     logger.error(f"Withings Notify List error: status={result.get('status')}")
             else:
@@ -366,14 +367,15 @@ class WebhookSubscriptionManager:
             response = requests.get(url, headers=headers, timeout=settings.WEBHOOK_CONFIG["TIMEOUT"])
             if response.status_code == 200:
                 data = response.json()
-                for sub in data.get("apiSubscriptions", []):
-                    subscription = WebhookSubscription(
+                subscriptions.extend(
+                    WebhookSubscription(
                         provider=Provider.FITBIT,
                         user_id=user_id,
                         subscription_id=sub.get("subscriptionId"),
                         data_types=[sub.get("collectionType", "unknown")],
                     )
-                    subscriptions.append(subscription)
+                    for sub in data.get("apiSubscriptions", [])
+                )
             else:
                 logger.error(f"Failed to list Fitbit subscriptions: {response.status_code}")
 

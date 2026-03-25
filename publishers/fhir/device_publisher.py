@@ -160,9 +160,6 @@ class DevicePublisher:
                     updated_device = self.fhir_client.update_resource("Device", device["id"], device)
                     deactivated_devices.append(updated_device)
 
-                    # Update cache
-                    self._remove_device_from_cache(provider, provider_device_id)
-
                     logger.info(f"Deactivated device {device['id']} (provider ID: {provider_device_id})")
 
             logger.info(f"Deactivated {len(deactivated_devices)} missing devices for provider {provider}")
@@ -184,31 +181,9 @@ class DevicePublisher:
             FHIR Device resource if found, None otherwise
         """
         try:
-            # Check cache first
-            cached_device_id = self._get_cached_device_id(provider, provider_device_id)
-            if cached_device_id:
-                try:
-                    result: dict[str, Any] = self.fhir_client.get_resource("Device", cached_device_id)
-                    return result
-                except Exception:
-                    # Cache miss or device deleted - fall through to search
-                    self._remove_device_from_cache(provider, provider_device_id)
-
-            # Search on FHIR server
             provider_system = f"https://api.{provider.lower()}.com/device-id"
 
-            device: dict[str, Any] | None = self.fhir_client.find_resource_by_identifier(
-                "Device", provider_system, provider_device_id
-            )
-
-            # Cache the result if found
-            if device:
-                self._cache_device_mapping(
-                    type("DeviceData", (), {"provider": provider, "provider_device_id": provider_device_id})(),
-                    device["id"],
-                )
-
-            return device
+            return self.fhir_client.find_resource_by_identifier("Device", provider_system, provider_device_id)
 
         except Exception as e:
             logger.error(f"Error getting device by provider ID {provider}/{provider_device_id}: {e}")
@@ -224,18 +199,6 @@ class DevicePublisher:
                 return value if isinstance(value, str) else None
 
         return None
-
-    def _cache_device_mapping(self, device_info, fhir_device_id: str):
-        """Cache device mapping for quick lookups"""
-        # cache.set(cache_key, fhir_device_id, timeout=settings.CACHE_TIMEOUTS['DEVICE_CACHE'])  # 24 hours - disabled temporarily
-
-    def _get_cached_device_id(self, provider: str, provider_device_id: str) -> str | None:
-        """Get cached FHIR device ID"""
-        return None  # cache.get(cache_key) - disabled temporarily
-
-    def _remove_device_from_cache(self, provider: str, provider_device_id: str):
-        """Remove device from cache"""
-        # cache.delete(cache_key) - disabled temporarily
 
     def get_device_statistics(self, patient_reference: str) -> dict[str, Any]:
         """

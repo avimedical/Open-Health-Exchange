@@ -3,7 +3,7 @@ Tests for Device Publisher - FHIR Device resource management.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -516,20 +516,3 @@ class TestDevicePublisherHelpers:
         result = publisher._get_device_type(device)
 
         assert result == "unknown"
-
-    def test_cache_device_mapping(self, publisher):
-        """Test caching device mapping (currently disabled)."""
-        # This should not raise even though caching is disabled
-        device_data = MagicMock()
-        publisher._cache_device_mapping(device_data, "fhir-device-123")
-
-    def test_get_cached_device_id(self, publisher):
-        """Test getting cached device ID (currently returns None)."""
-        result = publisher._get_cached_device_id("withings", "device-123")
-
-        assert result is None
-
-    def test_remove_device_from_cache(self, publisher):
-        """Test removing device from cache (currently no-op)."""
-        # Should not raise
-        publisher._remove_device_from_cache("withings", "device-123")
