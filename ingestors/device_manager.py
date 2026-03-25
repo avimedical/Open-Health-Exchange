@@ -70,13 +70,21 @@ class DeviceManager:
     def _get_user_credentials(self, user_id: str) -> OAuthCredentials:
         """Get OAuth credentials for a user"""
         try:
-            auth = UserSocialAuth.objects.get(user__ehr_user_id=user_id, provider=self.provider.value)
+            auth = (
+                UserSocialAuth.objects.filter(user__ehr_user_id=user_id, provider=self.provider.value)
+                .order_by("-id")
+                .first()
+            )
+            if not auth:
+                raise AuthenticationError(f"No {self.provider} credentials for user {user_id}")
             return OAuthCredentials(
                 access_token=auth.extra_data["access_token"],
                 refresh_token=auth.extra_data.get("refresh_token"),
                 user_id=auth.extra_data.get("userid"),
                 expires_in=auth.extra_data.get("expires"),
             )
+        except AuthenticationError:
+            raise
         except UserSocialAuth.DoesNotExist:
             raise AuthenticationError(f"No {self.provider} credentials for user {user_id}")
         except KeyError as e:

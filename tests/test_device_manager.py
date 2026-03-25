@@ -61,10 +61,10 @@ class TestDeviceManager:
         with pytest.raises(KeyError):
             DeviceManager("invalid_provider")
 
-    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
-    def test_get_user_credentials_success(self, mock_get, device_manager, mock_user_auth):
+    @patch("ingestors.device_manager.UserSocialAuth.objects.filter")
+    def test_get_user_credentials_success(self, mock_filter, device_manager, mock_user_auth):
         """Test successful credential retrieval"""
-        mock_get.return_value = mock_user_auth
+        mock_filter.return_value.order_by.return_value.first.return_value = mock_user_auth
 
         credentials = device_manager._get_user_credentials("test_user")
 
@@ -73,22 +73,20 @@ class TestDeviceManager:
         assert credentials.user_id == "test_user_id"
         assert credentials.expires_in == 3600
 
-    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
-    def test_get_user_credentials_not_found(self, mock_get, device_manager):
+    @patch("ingestors.device_manager.UserSocialAuth.objects.filter")
+    def test_get_user_credentials_not_found(self, mock_filter, device_manager):
         """Test credential retrieval when user not found"""
-        from social_django.models import UserSocialAuth
-
-        mock_get.side_effect = UserSocialAuth.DoesNotExist()
+        mock_filter.return_value.order_by.return_value.first.return_value = None
 
         with pytest.raises(AuthenticationError, match="No withings credentials"):
             device_manager._get_user_credentials("nonexistent_user")
 
-    @patch("ingestors.device_manager.UserSocialAuth.objects.get")
-    def test_get_user_credentials_missing_token(self, mock_get, device_manager):
+    @patch("ingestors.device_manager.UserSocialAuth.objects.filter")
+    def test_get_user_credentials_missing_token(self, mock_filter, device_manager):
         """Test credential retrieval with missing access token"""
         mock_auth = Mock()
         mock_auth.extra_data = {"refresh_token": "test"}  # Missing access_token
-        mock_get.return_value = mock_auth
+        mock_filter.return_value.order_by.return_value.first.return_value = mock_auth
 
         with pytest.raises(AuthenticationError, match="Missing credential field"):
             device_manager._get_user_credentials("test_user")

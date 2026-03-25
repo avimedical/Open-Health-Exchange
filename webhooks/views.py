@@ -385,7 +385,9 @@ def debug_withings_subscriptions(request):
 
         # Get Withings social auth
         try:
-            social_auth = UserSocialAuth.objects.get(user=user, provider="withings")
+            social_auth = UserSocialAuth.objects.filter(user=user, provider="withings").order_by("-id").first()
+            if not social_auth:
+                raise UserSocialAuth.DoesNotExist
         except UserSocialAuth.DoesNotExist:
             return Response(
                 {

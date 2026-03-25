@@ -4,6 +4,7 @@ Huey tasks for device synchronization
 
 import logging
 
+from django.db import close_old_connections
 from django.utils import timezone
 from huey import crontab
 
@@ -30,6 +31,7 @@ def sync_user_devices(user_id: str, provider_name: str, patient_reference: str |
         Sync result dictionary
     """
     logger.info(f"Starting device sync for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs
@@ -113,6 +115,7 @@ def nightly_device_sync() -> list[dict]:
         and is discarded by the Huey scheduler.
     """
     logger.info("Starting nightly device synchronization")
+    close_old_connections()
 
     # Get all active provider links
     active_links = ProviderLink.objects.filter(provider__active=True).select_related("user", "provider")
@@ -202,6 +205,7 @@ def ensure_webhook_subscriptions(user_id: str, provider_name: str, data_types: l
         Subscription result dictionary
     """
     logger.info(f"Ensuring webhook subscriptions for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs
