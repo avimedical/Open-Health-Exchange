@@ -1412,8 +1412,12 @@ class UnifiedHealthDataClient:
             User = get_user_model()
 
             user = User.objects.get(ehr_user_id=user_id)
-            social_auth = UserSocialAuth.objects.get(user=user, provider=provider.value)
+            social_auth = UserSocialAuth.objects.filter(user=user, provider=provider.value).order_by("-id").first()
+            if not social_auth:
+                raise APIError(f"No {provider.value} credentials for user {user_id}")
             return cast(UserSocialAuth, social_auth)
+        except APIError:
+            raise
         except Exception as e:
             raise APIError(f"Failed to get user tokens for {user_id}: {e}")
 

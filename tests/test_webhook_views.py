@@ -513,7 +513,7 @@ class TestDebugWithingsSubscriptions:
             # UserSocialAuth is imported from social_django.models
             with patch("social_django.models.UserSocialAuth") as mock_social:
                 mock_social.DoesNotExist = Exception
-                mock_social.objects.get.side_effect = mock_social.DoesNotExist
+                mock_social.objects.filter.return_value.order_by.return_value.first.return_value = None
 
                 response = debug_withings_subscriptions(request)
 
@@ -537,7 +537,7 @@ class TestDebugWithingsSubscriptions:
             # UserSocialAuth is imported from social_django.models
             with patch("social_django.models.UserSocialAuth") as mock_social:
                 mock_social.DoesNotExist = Exception
-                mock_social.objects.get.return_value = mock_social_auth
+                mock_social.objects.filter.return_value.order_by.return_value.first.return_value = mock_social_auth
 
                 # requests is imported inside the function
                 with patch("requests.get") as mock_get:
@@ -580,7 +580,7 @@ class TestDebugWithingsSubscriptions:
             # UserSocialAuth is imported from social_django.models
             with patch("social_django.models.UserSocialAuth") as mock_social:
                 mock_social.DoesNotExist = Exception
-                mock_social.objects.get.return_value = mock_social_auth
+                mock_social.objects.filter.return_value.order_by.return_value.first.return_value = mock_social_auth
 
                 # requests is imported inside the function
                 with patch("requests.get") as mock_get:
@@ -613,7 +613,7 @@ class TestDebugWithingsSubscriptions:
             # UserSocialAuth is imported from social_django.models
             with patch("social_django.models.UserSocialAuth") as mock_social:
                 mock_social.DoesNotExist = Exception
-                mock_social.objects.get.return_value = mock_social_auth
+                mock_social.objects.filter.return_value.order_by.return_value.first.return_value = mock_social_auth
 
                 # requests is imported inside the function
                 with patch("requests.get") as mock_get:

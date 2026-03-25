@@ -390,8 +390,12 @@ class WebhookSubscriptionManager:
             User = get_user_model()
 
             user = User.objects.get(ehr_user_id=user_id)
-            social_auth = UserSocialAuth.objects.get(user=user, provider=provider.value)
+            social_auth = UserSocialAuth.objects.filter(user=user, provider=provider.value).order_by("-id").first()
+            if not social_auth:
+                raise WebhookSubscriptionError(f"User {user_id} not connected to {provider.value}")
             return cast(UserSocialAuth, social_auth)
 
+        except WebhookSubscriptionError:
+            raise
         except Exception as e:
             raise WebhookSubscriptionError(f"User {user_id} not connected to {provider.value}: {e}")

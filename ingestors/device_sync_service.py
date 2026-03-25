@@ -9,7 +9,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from django.utils import timezone
 
+from publishers.fhir.association_publisher import DeviceAssociationPublisher
 from publishers.fhir.client import FHIRClient
+from publishers.fhir.device_publisher import DevicePublisher
 from transformers.fhir_transformers import DeviceAssociationTransformer, DeviceTransformer
 
 from .constants import DeviceData, Provider
@@ -82,19 +84,17 @@ class DeviceSyncService:
             devices = self._fetch_devices(user_id, provider)
             self.logger.info(f"Fetched {len(devices)} devices from {provider}")
 
-            if not devices:
-                result.success = True
-                return result
-
             # 2. Process each device
             processed_devices = []
             processed_associations = []
+            active_device_ids = []
 
             for device in devices:
                 try:
                     # Create FHIR Device
                     device_resource = self._publish_device(device)
                     processed_devices.append(device_resource)
+                    active_device_ids.append(device.provider_device_id)
 
                     # Create FHIR DeviceAssociation
                     device_ref = f"Device/{device_resource['id']}"
@@ -109,7 +109,30 @@ class DeviceSyncService:
                     assert result.errors is not None  # Initialized in __post_init__
                     result.errors.append(error_msg)
 
-            # 3. Update result
+            # 3. Deactivate devices/associations no longer present in provider
+            try:
+                device_publisher = DevicePublisher()
+                association_publisher = DeviceAssociationPublisher()
+
+                deactivated_devs = device_publisher.deactivate_missing_devices(
+                    active_device_ids, provider.value, patient_reference
+                )
+                deactivated_assocs = association_publisher.deactivate_missing_associations(
+                    active_device_ids, provider.value, patient_reference
+                )
+
+                result.deactivated_devices = len(deactivated_devs)
+                result.deactivated_associations = len(deactivated_assocs)
+
+                if deactivated_devs or deactivated_assocs:
+                    self.logger.info(
+                        f"Deactivated {len(deactivated_devs)} devices and "
+                        f"{len(deactivated_assocs)} associations for user {user_id}"
+                    )
+            except Exception as e:
+                self.logger.warning(f"Error during device deactivation for user {user_id}: {e}")
+
+            # 4. Update result
             result.processed_devices = len(processed_devices)
             result.processed_associations = len(processed_associations)
             assert result.errors is not None  # Initialized in __post_init__
@@ -119,6 +142,7 @@ class DeviceSyncService:
                 f"Device sync completed for user {user_id}: "
                 f"{result.processed_devices} devices, "
                 f"{result.processed_associations} associations, "
+                f"{result.deactivated_devices} deactivated devices, "
                 f"{len(result.errors)} errors"
             )
 

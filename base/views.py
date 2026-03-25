@@ -720,8 +720,10 @@ def unlink_provider(request, provider):
     from social_django.models import UserSocialAuth
 
     try:
-        social_auth = UserSocialAuth.objects.get(user=user, provider=provider)
-        social_auth.delete()
+        social_auths = UserSocialAuth.objects.filter(user=user, provider=provider)
+        if not social_auths.exists():
+            raise UserSocialAuth.DoesNotExist
+        social_auths.delete()
 
         logger.info(f"Successfully unlinked {provider} for user {ehr_user_id}")
 

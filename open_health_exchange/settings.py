@@ -81,6 +81,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -369,6 +370,8 @@ WSGI_APPLICATION = "open_health_exchange.wsgi.application"
 LOCAL_PGSQL = "postgres://postgres:postgres@localhost:5432/open_health_exchange_local"  # overwrite in local please
 DATABASES = {}
 DATABASES["default"] = dj_database_url.config(default=LOCAL_PGSQL)
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+DATABASES["default"]["CONN_MAX_AGE"] = 600  # Close idle connections after 10 minutes
 
 
 # Password validation
@@ -451,6 +454,11 @@ CACHES = {
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

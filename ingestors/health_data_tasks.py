@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from django.db import close_old_connections
 from huey import crontab
 
 from base.models import EHRUser, ProviderLink
@@ -44,6 +45,7 @@ def sync_user_health_data_realtime(
         Sync result dictionary
     """
     logger.info(f"Starting real-time health data sync for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs
@@ -128,6 +130,7 @@ def sync_user_health_data_incremental(
         Sync result dictionary
     """
     logger.info(f"Starting incremental health data sync for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs
@@ -215,6 +218,7 @@ def sync_user_health_data_initial(
     logger.info(
         f"Starting initial health data sync for user {user_id} with provider {provider_name} ({lookback_days} days)"
     )
+    close_old_connections()
 
     try:
         # Validate inputs
@@ -290,6 +294,7 @@ def nightly_health_data_sync() -> list[dict]:
     Runs every night at 4:00 AM
     """
     logger.info("Starting nightly health data synchronization")
+    close_old_connections()
 
     # Get all active provider links
     active_links = ProviderLink.objects.filter(provider__active=True).select_related("user", "provider")
