@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 class DeviceAssociationPublisher:
     """Publishes and manages FHIR DeviceAssociation resources"""
 
-    def __init__(self):
-        self.fhir_client = FHIRClient()
+    def __init__(self, fhir_client: FHIRClient | None = None):
+        self.fhir_client = fhir_client or FHIRClient()
         self.transformer = DeviceAssociationTransformer()
 
     def publish_association(

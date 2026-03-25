@@ -93,10 +93,9 @@ class TestSyncResult:
         assert result.success is True
         assert result.sync_timestamp == timestamp
 
-    def test_sync_result_post_init(self):
-        """Test SyncResult post_init behavior"""
-        # Test with None values
-        result = SyncResult(user_id="test-user", provider=Provider.WITHINGS, errors=None, sync_timestamp=None)
+    def test_sync_result_defaults(self):
+        """Test SyncResult default field values"""
+        result = SyncResult(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.errors == []
         assert result.sync_timestamp is not None

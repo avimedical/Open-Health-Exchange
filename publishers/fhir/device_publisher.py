@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class DevicePublisher:
     """Publishes and manages FHIR Device resources"""
 
-    def __init__(self):
-        self.fhir_client = FHIRClient()
+    def __init__(self, fhir_client: FHIRClient | None = None):
+        self.fhir_client = fhir_client or FHIRClient()
         self.transformer = DeviceTransformer()
 
     def publish_device(self, device_data: DeviceData, patient_reference: str | None = None) -> dict[str, Any]:
