@@ -321,7 +321,7 @@ class WebhookSubscriptionManager:
 
     def list_user_subscriptions(self, user_id: str) -> list[WebhookSubscription]:
         """List all webhook subscriptions for a user"""
-        subscriptions = []
+        subscriptions: list[WebhookSubscription] = []
 
         # Check Withings subscriptions via Notify List API
         try:

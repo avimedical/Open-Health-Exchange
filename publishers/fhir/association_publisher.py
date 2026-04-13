@@ -224,7 +224,8 @@ class DeviceAssociationPublisher:
             if bundle.get("total", 0) > 0:
                 entries = bundle.get("entry", [])
                 if entries:
-                    return entries[0].get("resource")
+                    resource: dict[str, Any] | None = entries[0].get("resource")
+                    return resource
 
             return None
 
