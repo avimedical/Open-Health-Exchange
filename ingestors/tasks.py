@@ -13,7 +13,7 @@ from open_health_exchange.settings import HUEY
 
 from .constants import Provider
 from .device_sync_service import DeviceSyncService
-from .health_data_tasks import _result_to_dict
+from .result_serialization import result_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def sync_user_devices(user_id: str, provider_name: str, patient_reference: str |
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        result_dict = _result_to_dict(result)
+        result_dict = result_to_dict(result)
 
         logger.info(f"Device sync completed for user {user_id}: {result_dict}")
         return result_dict

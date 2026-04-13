@@ -27,7 +27,6 @@ class SyncResult:
     provider: Provider
     processed_devices: int = 0
     processed_associations: int = 0
-    deactivated_devices: int = 0
     deactivated_associations: int = 0
     errors: list[str] = field(default_factory=list)
     success: bool = False

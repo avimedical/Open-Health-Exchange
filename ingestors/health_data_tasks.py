@@ -3,9 +3,7 @@ Huey tasks for health data synchronization
 """
 
 import logging
-from dataclasses import asdict
 from datetime import datetime
-from enum import Enum
 from typing import Any
 
 from django.db import close_old_connections
@@ -21,20 +19,9 @@ from .health_data_constants import (
 )
 from .health_data_service import HealthDataSyncService
 from .health_sync_strategies import SyncStrategy, SyncStrategyFactory
+from .result_serialization import result_to_dict
 
 logger = logging.getLogger(__name__)
-
-
-def _result_to_dict(result) -> dict[str, Any]:
-    """Convert a dataclass result to a JSON-serializable dict, converting enums to their values."""
-    return {
-        k: [i.value for i in v]
-        if isinstance(v, list) and v and isinstance(v[0], Enum)
-        else v.value
-        if isinstance(v, Enum)
-        else v
-        for k, v in asdict(result).items()
-    }
 
 
 @HUEY.task(priority=1)  # High priority for real-time sync
@@ -104,7 +91,7 @@ def sync_user_health_data_realtime(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        result_dict = _result_to_dict(result)
+        result_dict = result_to_dict(result)
 
         logger.info(f"Real-time health data sync completed for user {user_id}: {result_dict}")
         return result_dict
@@ -176,7 +163,7 @@ def sync_user_health_data_incremental(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        result_dict = _result_to_dict(result)
+        result_dict = result_to_dict(result)
 
         logger.info(f"Incremental health data sync completed for user {user_id}: {result_dict}")
         return result_dict
@@ -251,7 +238,7 @@ def sync_user_health_data_initial(
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        result_dict = _result_to_dict(result)
+        result_dict = result_to_dict(result)
 
         logger.info(f"Initial health data sync completed for user {user_id}: {result_dict}")
         return result_dict
