@@ -2,7 +2,7 @@
 Health data constants and models for the sync system
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -137,16 +137,10 @@ class HealthSyncResult:
     records_fetched: int = 0
     records_transformed: int = 0
     fhir_resources_created: int = 0
-    errors: list[str] | None = None
+    errors: list[str] = field(default_factory=list)
     success: bool = False
-    sync_timestamp: str | None = None
+    sync_timestamp: str = field(default_factory=_create_fhir_timestamp)
     processing_time_ms: int = 0
-
-    def __post_init__(self):
-        if self.errors is None:
-            self.errors = []
-        if self.sync_timestamp is None:
-            self.sync_timestamp = _create_fhir_timestamp()
 
 
 # LOINC codes for health data types

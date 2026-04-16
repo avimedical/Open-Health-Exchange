@@ -502,17 +502,16 @@ def provider_linking_status(request, provider):
         # Check for existing provider links
         provider_links = ProviderLink.objects.filter(user=target_user, provider__provider_type=provider)
 
-        links_data = []
-        for link in provider_links:
-            links_data.append(
-                {
-                    "provider_name": link.provider.name,
-                    "provider_type": link.provider.provider_type,
-                    "external_user_id": link.external_user_id,
-                    "active": link.provider.active,
-                    "linked_at": link.linked_at.isoformat() if hasattr(link, "linked_at") and link.linked_at else None,
-                }
-            )
+        links_data = [
+            {
+                "provider_name": link.provider.name,
+                "provider_type": link.provider.provider_type,
+                "external_user_id": link.external_user_id,
+                "active": link.provider.active,
+                "linked_at": link.linked_at.isoformat() if hasattr(link, "linked_at") and link.linked_at else None,
+            }
+            for link in provider_links
+        ]
 
         return Response(
             {
@@ -720,10 +719,9 @@ def unlink_provider(request, provider):
     from social_django.models import UserSocialAuth
 
     try:
-        social_auths = UserSocialAuth.objects.filter(user=user, provider=provider)
-        if not social_auths.exists():
+        deleted_count, _ = UserSocialAuth.objects.filter(user=user, provider=provider).delete()
+        if deleted_count == 0:
             raise UserSocialAuth.DoesNotExist
-        social_auths.delete()
 
         logger.info(f"Successfully unlinked {provider} for user {ehr_user_id}")
 

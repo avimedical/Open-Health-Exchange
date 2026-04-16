@@ -60,7 +60,6 @@ class TestSyncResult:
         assert result.provider == Provider.WITHINGS
         assert result.processed_devices == 0
         assert result.processed_associations == 0
-        assert result.deactivated_devices == 0
         assert result.deactivated_associations == 0
         assert result.errors == []
         assert result.success is False
@@ -76,7 +75,6 @@ class TestSyncResult:
             provider=Provider.FITBIT,
             processed_devices=5,
             processed_associations=5,
-            deactivated_devices=2,
             deactivated_associations=1,
             errors=errors,
             success=True,
@@ -87,16 +85,14 @@ class TestSyncResult:
         assert result.provider == Provider.FITBIT
         assert result.processed_devices == 5
         assert result.processed_associations == 5
-        assert result.deactivated_devices == 2
         assert result.deactivated_associations == 1
         assert result.errors == errors
         assert result.success is True
         assert result.sync_timestamp == timestamp
 
-    def test_sync_result_post_init(self):
-        """Test SyncResult post_init behavior"""
-        # Test with None values
-        result = SyncResult(user_id="test-user", provider=Provider.WITHINGS, errors=None, sync_timestamp=None)
+    def test_sync_result_defaults(self):
+        """Test SyncResult default field values"""
+        result = SyncResult(user_id="test-user", provider=Provider.WITHINGS)
 
         assert result.errors == []
         assert result.sync_timestamp is not None
@@ -188,6 +184,61 @@ class TestDeviceSyncService:
         assert result.processed_associations == 1  # Only one association succeeded
         assert len(result.errors) == 1
         assert result.success is False
+
+    @patch("ingestors.device_sync_service.DeviceAssociationPublisher")
+    @patch.object(DeviceSyncService, "_fetch_devices")
+    @patch.object(DeviceSyncService, "_publish_device")
+    @patch.object(DeviceSyncService, "_publish_association")
+    def test_sync_user_devices_deactivation_uses_full_provider_list_on_publish_failure(
+        self,
+        mock_publish_association,
+        mock_publish_device,
+        mock_fetch_devices,
+        mock_assoc_publisher_cls,
+        device_sync_service,
+        sample_devices,
+    ):
+        """Publish failures must not drop devices from the active-list used for deactivation.
+
+        Regression guard: active_device_ids is collected from the provider response
+        (not from successfully-published devices), so a transient FHIR error for
+        device-2 must not cause its existing association to be deactivated.
+        """
+        mock_fetch_devices.return_value = sample_devices
+        mock_publish_device.side_effect = [{"id": "device-fhir-1"}, Exception("FHIR Error")]
+        mock_publish_association.return_value = {"id": "association-fhir-1"}
+
+        mock_assoc_publisher = Mock()
+        mock_assoc_publisher.deactivate_missing_associations.return_value = []
+        mock_assoc_publisher_cls.return_value = mock_assoc_publisher
+
+        device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
+
+        mock_assoc_publisher.deactivate_missing_associations.assert_called_once()
+        active_ids = mock_assoc_publisher.deactivate_missing_associations.call_args[0][0]
+        assert active_ids == ["device-1", "device-2"]
+
+    @patch("ingestors.device_sync_service.DeviceAssociationPublisher")
+    @patch.object(DeviceSyncService, "_fetch_devices")
+    def test_sync_user_devices_empty_provider_list_deactivates_all(
+        self, mock_fetch_devices, mock_assoc_publisher_cls, device_sync_service
+    ):
+        """When provider returns zero devices, deactivation must still run with an empty active list.
+
+        This is the phantom-device scenario: user unpaired everything in the provider app,
+        so all existing DeviceAssociations for this patient must get deactivated.
+        """
+        mock_fetch_devices.return_value = []
+        mock_assoc_publisher = Mock()
+        mock_assoc_publisher.deactivate_missing_associations.return_value = [{"id": "a1"}, {"id": "a2"}]
+        mock_assoc_publisher_cls.return_value = mock_assoc_publisher
+
+        result = device_sync_service.sync_user_devices(user_id="test-user", provider=Provider.WITHINGS)
+
+        mock_assoc_publisher.deactivate_missing_associations.assert_called_once()
+        active_ids = mock_assoc_publisher.deactivate_missing_associations.call_args[0][0]
+        assert active_ids == []
+        assert result.deactivated_associations == 2
 
     def test_sync_user_devices_string_provider(self, device_sync_service):
         """Test synchronization with string provider name"""

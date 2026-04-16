@@ -3,7 +3,7 @@ Tests for Device Publisher - FHIR Device resource management.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -270,80 +270,6 @@ class TestDevicePublisherSearch:
             publisher.get_device_by_provider_id("withings", "device-123")
 
 
-class TestDevicePublisherDeactivation:
-    """Tests for device deactivation functionality."""
-
-    @pytest.fixture
-    def publisher(self):
-        """Create a DevicePublisher instance with mocked dependencies."""
-        with (
-            patch("publishers.fhir.device_publisher.FHIRClient") as mock_client,
-            patch("publishers.fhir.device_publisher.DeviceTransformer"),
-        ):
-            publisher = DevicePublisher()
-            publisher.fhir_client = mock_client.return_value
-            yield publisher
-
-    def test_deactivate_missing_devices_success(self, publisher):
-        """Test deactivating devices that are no longer active."""
-        existing_devices = [
-            {
-                "id": "fhir-device-1",
-                "status": "active",
-                "identifier": [{"system": "https://api.withings.com/device-id", "value": "device-1"}],
-            },
-            {
-                "id": "fhir-device-2",
-                "status": "active",
-                "identifier": [{"system": "https://api.withings.com/device-id", "value": "device-2"}],
-            },
-        ]
-        publisher.fhir_client.search_resource.return_value = {
-            "total": 2,
-            "entry": [{"resource": d} for d in existing_devices],
-        }
-        publisher.fhir_client.update_resource.return_value = {
-            **existing_devices[1],
-            "status": "inactive",
-        }
-
-        # Only device-1 is still active in provider API
-        deactivated = publisher.deactivate_missing_devices(["device-1"], "withings", "Patient/test-user")
-
-        assert len(deactivated) == 1
-        publisher.fhir_client.update_resource.assert_called_once()
-        # Verify the device status was set to inactive
-        call_args = publisher.fhir_client.update_resource.call_args
-        assert call_args[0][2]["status"] == "inactive"
-
-    def test_deactivate_missing_devices_none_to_deactivate(self, publisher):
-        """Test when all devices are still active in provider."""
-        existing_devices = [
-            {
-                "id": "fhir-device-1",
-                "status": "active",
-                "identifier": [{"system": "https://api.withings.com/device-id", "value": "device-1"}],
-            },
-        ]
-        publisher.fhir_client.search_resource.return_value = {
-            "total": 1,
-            "entry": [{"resource": existing_devices[0]}],
-        }
-
-        # All devices are still active
-        deactivated = publisher.deactivate_missing_devices(["device-1"], "withings", "Patient/test-user")
-
-        assert len(deactivated) == 0
-        publisher.fhir_client.update_resource.assert_not_called()
-
-    def test_deactivate_missing_devices_error(self, publisher):
-        """Test error handling in deactivation."""
-        publisher.fhir_client.search_resource.side_effect = Exception("Search failed")
-
-        with pytest.raises(Exception, match="Search failed"):
-            publisher.deactivate_missing_devices([], "withings", "Patient/test-user")
-
-
 class TestDevicePublisherStatistics:
     """Tests for device statistics functionality."""
 
@@ -428,39 +354,6 @@ class TestDevicePublisherHelpers:
         ):
             yield DevicePublisher()
 
-    def test_extract_provider_device_id_found(self, publisher):
-        """Test extracting provider device ID from FHIR device."""
-        device = {
-            "identifier": [
-                {"system": "https://api.withings.com/device-id", "value": "device-123"},
-                {"system": "http://other.system", "value": "other-id"},
-            ]
-        }
-
-        result = publisher._extract_provider_device_id(device, "withings")
-
-        assert result == "device-123"
-
-    def test_extract_provider_device_id_not_found(self, publisher):
-        """Test extracting provider device ID when not present."""
-        device = {
-            "identifier": [
-                {"system": "http://other.system", "value": "other-id"},
-            ]
-        }
-
-        result = publisher._extract_provider_device_id(device, "withings")
-
-        assert result is None
-
-    def test_extract_provider_device_id_no_identifiers(self, publisher):
-        """Test extracting provider device ID with no identifiers."""
-        device = {}
-
-        result = publisher._extract_provider_device_id(device, "withings")
-
-        assert result is None
-
     def test_get_device_provider_withings(self, publisher):
         """Test extracting provider from Withings device."""
         device = {"identifier": [{"system": "https://api.withings.com/device-id", "value": "w123"}]}
@@ -516,20 +409,3 @@ class TestDevicePublisherHelpers:
         result = publisher._get_device_type(device)
 
         assert result == "unknown"
-
-    def test_cache_device_mapping(self, publisher):
-        """Test caching device mapping (currently disabled)."""
-        # This should not raise even though caching is disabled
-        device_data = MagicMock()
-        publisher._cache_device_mapping(device_data, "fhir-device-123")
-
-    def test_get_cached_device_id(self, publisher):
-        """Test getting cached device ID (currently returns None)."""
-        result = publisher._get_cached_device_id("withings", "device-123")
-
-        assert result is None
-
-    def test_remove_device_from_cache(self, publisher):
-        """Test removing device from cache (currently no-op)."""
-        # Should not raise
-        publisher._remove_device_from_cache("withings", "device-123")
