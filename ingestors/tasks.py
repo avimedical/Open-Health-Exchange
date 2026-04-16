@@ -4,6 +4,7 @@ Huey tasks for device synchronization
 
 import logging
 
+from django.db import close_old_connections
 from django.utils import timezone
 from huey import crontab
 
@@ -12,6 +13,7 @@ from open_health_exchange.settings import HUEY
 
 from .constants import Provider
 from .device_sync_service import DeviceSyncService
+from .result_serialization import result_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ def sync_user_devices(user_id: str, provider_name: str, patient_reference: str |
         Sync result dictionary
     """
     logger.info(f"Starting device sync for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs
@@ -55,18 +58,7 @@ def sync_user_devices(user_id: str, provider_name: str, patient_reference: str |
         except Exception as e:
             logger.warning(f"Could not update provider link: {e}")
 
-        # Convert result to dictionary
-        result_dict = {
-            "user_id": result.user_id,
-            "provider": result.provider.value,
-            "processed_devices": result.processed_devices,
-            "processed_associations": result.processed_associations,
-            "deactivated_devices": result.deactivated_devices,
-            "deactivated_associations": result.deactivated_associations,
-            "errors": result.errors,
-            "success": result.success,
-            "sync_timestamp": result.sync_timestamp,
-        }
+        result_dict = result_to_dict(result)
 
         logger.info(f"Device sync completed for user {user_id}: {result_dict}")
         return result_dict
@@ -113,6 +105,7 @@ def nightly_device_sync() -> list[dict]:
         and is discarded by the Huey scheduler.
     """
     logger.info("Starting nightly device synchronization")
+    close_old_connections()
 
     # Get all active provider links
     active_links = ProviderLink.objects.filter(provider__active=True).select_related("user", "provider")
@@ -202,6 +195,7 @@ def ensure_webhook_subscriptions(user_id: str, provider_name: str, data_types: l
         Subscription result dictionary
     """
     logger.info(f"Ensuring webhook subscriptions for user {user_id} with provider {provider_name}")
+    close_old_connections()
 
     try:
         # Validate inputs

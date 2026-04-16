@@ -2,7 +2,7 @@
 Tests for DeviceAssociation Publisher - FHIR DeviceAssociation resource management.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -382,20 +382,3 @@ class TestAssociationHelpers:
         result = publisher._get_association_provider(association)
 
         assert result is None
-
-    def test_cache_association_mapping(self, publisher):
-        """Test caching association mapping (currently disabled)."""
-        # Should not raise even though caching is disabled
-        device_info = MagicMock()
-        publisher._cache_association_mapping(device_info, "assoc-123")
-
-    def test_get_cached_association_id(self, publisher):
-        """Test getting cached association ID (currently returns None)."""
-        result = publisher._get_cached_association_id("withings", "device-123")
-
-        assert result is None
-
-    def test_remove_association_from_cache(self, publisher):
-        """Test removing association from cache (currently no-op)."""
-        # Should not raise
-        publisher._remove_association_from_cache("withings", "device-123")

@@ -3,12 +3,13 @@ Modern device synchronization service
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from django.utils import timezone
 
+from publishers.fhir.association_publisher import DeviceAssociationPublisher
 from publishers.fhir.client import FHIRClient
 from transformers.fhir_transformers import DeviceAssociationTransformer, DeviceTransformer
 
@@ -16,13 +17,6 @@ from .constants import DeviceData, Provider
 from .device_manager import DeviceManagerFactory
 
 logger = logging.getLogger(__name__)
-
-
-@runtime_checkable
-class FHIRPublisher(Protocol):
-    """Protocol for FHIR publishers"""
-
-    def publish_resource(self, resource_type: str, resource_data: dict) -> dict: ...
 
 
 @dataclass(slots=True)
@@ -33,17 +27,10 @@ class SyncResult:
     provider: Provider
     processed_devices: int = 0
     processed_associations: int = 0
-    deactivated_devices: int = 0
     deactivated_associations: int = 0
-    errors: list[str] | None = None
+    errors: list[str] = field(default_factory=list)
     success: bool = False
-    sync_timestamp: str | None = None
-
-    def __post_init__(self):
-        if self.errors is None:
-            self.errors = []
-        if self.sync_timestamp is None:
-            self.sync_timestamp = datetime.now(UTC).isoformat()
+    sync_timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class DeviceSyncService:
@@ -82,9 +69,9 @@ class DeviceSyncService:
             devices = self._fetch_devices(user_id, provider)
             self.logger.info(f"Fetched {len(devices)} devices from {provider}")
 
-            if not devices:
-                result.success = True
-                return result
+            # Collect active device IDs from the provider response (not from publish results)
+            # so that publish failures don't cause incorrect deactivation
+            active_device_ids = [device.provider_device_id for device in devices]
 
             # 2. Process each device
             processed_devices = []
@@ -106,19 +93,36 @@ class DeviceSyncService:
                 except Exception as e:
                     error_msg = f"Error processing device {device.provider_device_id}: {e}"
                     self.logger.error(error_msg)
-                    assert result.errors is not None  # Initialized in __post_init__
                     result.errors.append(error_msg)
 
-            # 3. Update result
+            # 3. Deactivate associations no longer present in provider
+            # Note: Only deactivate DeviceAssociations (patient-scoped), not Device resources.
+            # Device resources are not patient-scoped in FHIR, so deactivating them here
+            # could affect other users sharing the same provider.
+            try:
+                association_publisher = DeviceAssociationPublisher(self.fhir_client)
+
+                deactivated_assocs = association_publisher.deactivate_missing_associations(
+                    active_device_ids, provider.value, patient_reference
+                )
+
+                result.deactivated_associations = len(deactivated_assocs)
+
+                if deactivated_assocs:
+                    self.logger.info(f"Deactivated {len(deactivated_assocs)} associations for user {user_id}")
+            except Exception as e:
+                self.logger.warning(f"Error during association deactivation for user {user_id}: {e}")
+
+            # 4. Update result
             result.processed_devices = len(processed_devices)
             result.processed_associations = len(processed_associations)
-            assert result.errors is not None  # Initialized in __post_init__
             result.success = len(result.errors) == 0
 
             self.logger.info(
                 f"Device sync completed for user {user_id}: "
                 f"{result.processed_devices} devices, "
                 f"{result.processed_associations} associations, "
+                f"{result.deactivated_associations} deactivated associations, "
                 f"{len(result.errors)} errors"
             )
 
@@ -127,7 +131,6 @@ class DeviceSyncService:
         except Exception as e:
             error_msg = f"Unexpected error in device sync for user {user_id}: {e}"
             self.logger.error(error_msg)
-            assert result.errors is not None  # Initialized in __post_init__
             result.errors.append(error_msg)
             return result
 

@@ -257,7 +257,7 @@ class ECGTransformer(BaseFHIRTransformer):
             },
             "interval": interval_ms,
             "intervalUnit": "ms",
-            "factor": scaling_factor if scaling_factor > 0 else 1.0,
+            "factor": scaling_factor if scaling_factor != 0 else 1.0,
             "lowerLimit": -3300,  # Typical ECG range
             "upperLimit": 3300,
             "dimensions": 1,

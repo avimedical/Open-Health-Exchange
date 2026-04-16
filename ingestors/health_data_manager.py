@@ -62,9 +62,12 @@ class BaseHealthDataManager(ABC):
         """Get user's social auth for this provider"""
         try:
             user = User.objects.get(ehr_user_id=user_id)
-            return cast(UserSocialAuth, UserSocialAuth.objects.get(user=user, provider=self.provider.value))
-        except (User.DoesNotExist, UserSocialAuth.DoesNotExist) as e:
-            raise ValueError(f"User {user_id} not found or not connected to {self.provider.value}") from e
+            social_auth = UserSocialAuth.objects.filter(user=user, provider=self.provider.value).order_by("-id").first()
+            if not social_auth:
+                raise ValueError(f"User {user_id} not connected to {self.provider.value}")
+            return cast(UserSocialAuth, social_auth)
+        except User.DoesNotExist as e:
+            raise ValueError(f"User {user_id} not found") from e
 
     def _create_health_record(
         self,

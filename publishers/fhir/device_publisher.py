@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class DevicePublisher:
     """Publishes and manages FHIR Device resources"""
 
-    def __init__(self):
-        self.fhir_client = FHIRClient()
+    def __init__(self, fhir_client: FHIRClient | None = None):
+        self.fhir_client = fhir_client or FHIRClient()
         self.transformer = DeviceTransformer()
 
     def publish_device(self, device_data: DeviceData, patient_reference: str | None = None) -> dict[str, Any]:
@@ -118,60 +118,6 @@ class DevicePublisher:
             logger.error(f"[find_devices] Error finding devices for provider {provider}: {e}", exc_info=True)
             raise
 
-    def deactivate_missing_devices(
-        self, active_device_ids: list[str], provider: str, patient_reference: str
-    ) -> list[dict[str, Any]]:
-        """
-        Deactivate devices that are no longer present in provider API
-
-        Args:
-            active_device_ids: List of provider device IDs that are currently active
-            provider: Provider name
-            patient_reference: FHIR Patient reference
-
-        Returns:
-            List of deactivated Device resources
-        """
-        try:
-            # Get all existing devices for this provider
-            existing_devices = self.find_devices_by_provider(provider, patient_reference)
-            deactivated_devices = []
-
-            for device in existing_devices:
-                # Extract provider device ID from identifiers
-                provider_device_id = self._extract_provider_device_id(device, provider)
-
-                if provider_device_id and provider_device_id not in active_device_ids:
-                    # Device is missing from provider API - deactivate it
-                    device["status"] = "inactive"
-                    device["statusReason"] = [
-                        {
-                            "coding": [
-                                {
-                                    "system": "http://terminology.hl7.org/CodeSystem/device-status-reason",
-                                    "code": "offline",
-                                    "display": "Offline",
-                                }
-                            ]
-                        }
-                    ]
-
-                    # Update the device on FHIR server
-                    updated_device = self.fhir_client.update_resource("Device", device["id"], device)
-                    deactivated_devices.append(updated_device)
-
-                    # Update cache
-                    self._remove_device_from_cache(provider, provider_device_id)
-
-                    logger.info(f"Deactivated device {device['id']} (provider ID: {provider_device_id})")
-
-            logger.info(f"Deactivated {len(deactivated_devices)} missing devices for provider {provider}")
-            return deactivated_devices
-
-        except Exception as e:
-            logger.error(f"Error deactivating missing devices for provider {provider}: {e}")
-            raise
-
     def get_device_by_provider_id(self, provider: str, provider_device_id: str) -> dict[str, Any] | None:
         """
         Get a device by provider and provider device ID
@@ -184,58 +130,13 @@ class DevicePublisher:
             FHIR Device resource if found, None otherwise
         """
         try:
-            # Check cache first
-            cached_device_id = self._get_cached_device_id(provider, provider_device_id)
-            if cached_device_id:
-                try:
-                    result: dict[str, Any] = self.fhir_client.get_resource("Device", cached_device_id)
-                    return result
-                except Exception:
-                    # Cache miss or device deleted - fall through to search
-                    self._remove_device_from_cache(provider, provider_device_id)
-
-            # Search on FHIR server
             provider_system = f"https://api.{provider.lower()}.com/device-id"
 
-            device: dict[str, Any] | None = self.fhir_client.find_resource_by_identifier(
-                "Device", provider_system, provider_device_id
-            )
-
-            # Cache the result if found
-            if device:
-                self._cache_device_mapping(
-                    type("DeviceData", (), {"provider": provider, "provider_device_id": provider_device_id})(),
-                    device["id"],
-                )
-
-            return device
+            return self.fhir_client.find_resource_by_identifier("Device", provider_system, provider_device_id)
 
         except Exception as e:
             logger.error(f"Error getting device by provider ID {provider}/{provider_device_id}: {e}")
             raise
-
-    def _extract_provider_device_id(self, device: dict[str, Any], provider: str) -> str | None:
-        """Extract provider device ID from FHIR Device identifiers"""
-        provider_system = f"https://api.{provider.lower()}.com/device-id"
-
-        for identifier in device.get("identifier", []):
-            if identifier.get("system") == provider_system:
-                value = identifier.get("value")
-                return value if isinstance(value, str) else None
-
-        return None
-
-    def _cache_device_mapping(self, device_info, fhir_device_id: str):
-        """Cache device mapping for quick lookups"""
-        # cache.set(cache_key, fhir_device_id, timeout=settings.CACHE_TIMEOUTS['DEVICE_CACHE'])  # 24 hours - disabled temporarily
-
-    def _get_cached_device_id(self, provider: str, provider_device_id: str) -> str | None:
-        """Get cached FHIR device ID"""
-        return None  # cache.get(cache_key) - disabled temporarily
-
-    def _remove_device_from_cache(self, provider: str, provider_device_id: str):
-        """Remove device from cache"""
-        # cache.delete(cache_key) - disabled temporarily
 
     def get_device_statistics(self, patient_reference: str) -> dict[str, Any]:
         """

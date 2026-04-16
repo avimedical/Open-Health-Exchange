@@ -97,6 +97,10 @@ class WithingsOAuth2(BaseOAuth2):
     def validate_state(self):
         state = self.get_session_state()
         if not state:
+            # Known limitation: mobile browsers (especially iOS Safari) may lose the session
+            # between OAuth redirect and callback due to aggressive cookie policies.
+            # This is a low-frequency issue (~2 users) and not worth a complex fix.
+            logger.warning("Session value 'state' missing — likely mobile browser session loss during OAuth redirect")
             raise AuthStateMissing(self, "state")
         return state
 
