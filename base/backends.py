@@ -1,12 +1,17 @@
+import hashlib
 import logging
 from typing import Any
 
 import requests
+from django.conf import settings
 from django.contrib.auth.models import Group
+from django.core.cache import cache
 from django.core.exceptions import SuspiciousOperation
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from social_core.backends.oauth import BaseOAuth2
 from social_core.exceptions import AuthStateMissing, AuthTokenError
+
+_USERINFO_CACHE_PREFIX = "oidc:userinfo:"
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +431,17 @@ class OidcAuthenticationBackend(OIDCAuthenticationBackend):
         if self.userinfo_needs_update(user, claims):
             return self.update_user(user, claims)
         return user
+
+    def get_userinfo(self, access_token, id_token, payload):
+        # Cache by access_token so we don't hit the OIDC server on every request;
+        # TTL matches the provider's ACCESS_TOKEN_EXPIRE_SECONDS (see settings.CACHE_TIMEOUTS).
+        cache_key = _USERINFO_CACHE_PREFIX + hashlib.sha256(access_token.encode()).hexdigest()
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+        user_info = super().get_userinfo(access_token, id_token, payload)
+        cache.set(cache_key, user_info, settings.CACHE_TIMEOUTS["OIDC_USERINFO"])
+        return user_info
 
     def get_or_create_user(self, access_token, id_token, payload):
         # copied from source but added acces_token to update_user
