@@ -444,7 +444,7 @@ class OidcAuthenticationBackend(OIDCAuthenticationBackend):
         return user_info
 
     def get_or_create_user(self, access_token, id_token, payload):
-        # copied from source but added acces_token to update_user
+        # copied from source but added access_token to update_user
         """Returns a User instance if 1 user is found. Creates a user if not found
         and configured to do so. Returns nothing if multiple users are matched."""
         user_info: dict = self.get_userinfo(access_token, id_token, payload)
