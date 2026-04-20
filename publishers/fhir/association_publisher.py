@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 class DeviceAssociationPublisher:
     """Publishes and manages FHIR DeviceAssociation resources"""
 
-    def __init__(self):
-        self.fhir_client = FHIRClient()
+    def __init__(self, fhir_client: FHIRClient | None = None):
+        self.fhir_client = fhir_client or FHIRClient()
         self.transformer = DeviceAssociationTransformer()
 
     def publish_association(
@@ -61,9 +61,6 @@ class DeviceAssociationPublisher:
                     dict[str, Any], self.fhir_client.create_resource("DeviceAssociation", fhir_association)
                 )
                 logger.info(f"Created new device association {association_resource['id']}")
-
-            # Cache the association mapping (disabled temporarily)
-            # self._cache_association_mapping(device_info, association_resource['id'])
 
             return association_resource
 
@@ -159,9 +156,6 @@ class DeviceAssociationPublisher:
                 ),
             )
 
-            # Update cache
-            self._remove_association_from_cache(provider, provider_device_id)
-
             logger.info(f"Deactivated device association {association_resource['id']}")
             return association_resource
 
@@ -223,38 +217,15 @@ class DeviceAssociationPublisher:
             DeviceAssociation resource if found, None otherwise
         """
         try:
-            # Check cache first
-            cached_association_id = self._get_cached_association_id(provider, provider_device_id)
-            if cached_association_id:
-                try:
-                    association = cast(
-                        dict[str, Any],
-                        self.fhir_client.get_resource("DeviceAssociation", cached_association_id),
-                    )
-                    # Verify it's for the right patient
-                    if association.get("subject", {}).get("reference") == patient_reference:
-                        return association
-                except Exception:
-                    # Cache miss or association deleted - fall through to search
-                    self._remove_association_from_cache(provider, provider_device_id)
-
-            # Search on FHIR server
             provider_system = f"https://api.{provider.lower()}.com/device-association"
-
             params = {"subject": patient_reference, "identifier": f"{provider_system}|{provider_device_id}"}
-
-            bundle = cast(dict[str, Any], self.fhir_client.search_resource("DeviceAssociation", params))
+            bundle = self.fhir_client.search_resource("DeviceAssociation", params)
 
             if bundle.get("total", 0) > 0:
                 entries = bundle.get("entry", [])
                 if entries:
-                    association = cast(dict[str, Any], entries[0].get("resource"))
-                    # Cache the result
-                    self._cache_association_mapping(
-                        type("DeviceData", (), {"provider": provider, "provider_device_id": provider_device_id})(),
-                        association["id"],
-                    )
-                    return association
+                    resource: dict[str, Any] | None = entries[0].get("resource")
+                    return resource
 
             return None
 
@@ -380,15 +351,3 @@ class DeviceAssociationPublisher:
             elif "fitbit.com" in system:
                 return "fitbit"
         return None
-
-    def _cache_association_mapping(self, device_info, fhir_association_id: str):
-        """Cache association mapping for quick lookups"""
-        # cache.set(cache_key, fhir_association_id, timeout=settings.CACHE_TIMEOUTS['ASSOCIATION_CACHE'])  # 24 hours - disabled temporarily
-
-    def _get_cached_association_id(self, provider: str, provider_device_id: str) -> str | None:
-        """Get cached FHIR association ID"""
-        return None  # cache.get(cache_key) - disabled temporarily
-
-    def _remove_association_from_cache(self, provider: str, provider_device_id: str):
-        """Remove association from cache"""
-        # cache.delete(cache_key) - disabled temporarily

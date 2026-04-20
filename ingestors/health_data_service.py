@@ -118,7 +118,6 @@ class HealthDataSyncService:
 
             # 5. Handle publishing errors
             if publish_result.get("errors"):
-                assert result.errors is not None  # Initialized in __post_init__
                 result.errors.extend(publish_result["errors"])
 
             # 6. Determine success

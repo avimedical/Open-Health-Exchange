@@ -81,6 +81,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -369,6 +370,8 @@ WSGI_APPLICATION = "open_health_exchange.wsgi.application"
 LOCAL_PGSQL = "postgres://postgres:postgres@localhost:5432/open_health_exchange_local"  # overwrite in local please
 DATABASES = {}
 DATABASES["default"] = dj_database_url.config(default=LOCAL_PGSQL)
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+DATABASES["default"]["CONN_MAX_AGE"] = 600  # Close idle connections after 10 minutes
 
 
 # Password validation
@@ -451,6 +454,14 @@ CACHES = {
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -511,6 +522,9 @@ CACHE_TIMEOUTS = {
     "DEVICE_CACHE": int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
     "ASSOCIATION_CACHE": int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
     "WEBHOOK_HEALTH": int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
+    "OIDC_USERINFO": int(
+        os.environ.get("OIDC_USERINFO_CACHE_TIMEOUT", "900")
+    ),  # Matches accounts ACCESS_TOKEN_EXPIRE_SECONDS
 }
 
 # Huey Task Configuration
