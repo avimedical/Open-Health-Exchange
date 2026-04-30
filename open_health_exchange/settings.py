@@ -371,7 +371,7 @@ LOCAL_PGSQL = "postgres://postgres:postgres@localhost:5432/open_health_exchange_
 DATABASES = {}
 DATABASES["default"] = dj_database_url.config(default=LOCAL_PGSQL)
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
-DATABASES["default"]["CONN_MAX_AGE"] = 600  # Close idle connections after 10 minutes
+DATABASES["default"]["CONN_MAX_AGE"] = None  # pooler bellow should handle it
 DATABASES["default"]["OPTIONS"] = {
     "pool": {
         "min_size": 2,
