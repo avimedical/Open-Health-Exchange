@@ -2141,7 +2141,6 @@ files = [
 
 [package.dependencies]
 psycopg-binary = {version = "3.3.3", optional = true, markers = "implementation_name != \"pypy\" and extra == \"binary\""}
-psycopg-pool = {version = "*", optional = true, markers = "extra == \"pool\""}
 tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
 [package.extras]
@@ -3478,4 +3477,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0.0"
-content-hash = "867221b40f5a3b6b9dc95ada40f5d7158d6abd0f777db55c0545307528fcf93d"
+content-hash = "ac8710e696895ad34ae39b453e1658ac47c6b123f95326fd0303620f57e395a6"
