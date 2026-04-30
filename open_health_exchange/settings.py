@@ -528,6 +528,9 @@ CACHE_TIMEOUTS = {
     "DEVICE_CACHE": int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
     "ASSOCIATION_CACHE": int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
     "WEBHOOK_HEALTH": int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
+    "OIDC_USERINFO": int(
+        os.environ.get("OIDC_USERINFO_CACHE_TIMEOUT", "900")
+    ),  # Matches accounts ACCESS_TOKEN_EXPIRE_SECONDS
 }
 
 # Huey Task Configuration
