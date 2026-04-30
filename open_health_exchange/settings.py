@@ -372,7 +372,13 @@ DATABASES = {}
 DATABASES["default"] = dj_database_url.config(default=LOCAL_PGSQL)
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 DATABASES["default"]["CONN_MAX_AGE"] = 600  # Close idle connections after 10 minutes
-
+DATABASES["default"]["OPTIONS"] = {
+    "pool": {
+        "min_size": 2,
+        "max_size": 50,  # tune: max_connections(800) * 0.8 / num_replicas
+        "timeout": 30,
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
