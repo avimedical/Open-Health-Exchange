@@ -371,8 +371,14 @@ LOCAL_PGSQL = "postgres://postgres:postgres@localhost:5432/open_health_exchange_
 DATABASES = {}
 DATABASES["default"] = dj_database_url.config(default=LOCAL_PGSQL)
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
-DATABASES["default"]["CONN_MAX_AGE"] = 600  # Close idle connections after 10 minutes
-
+DATABASES["default"]["CONN_MAX_AGE"] = 0  # pool manages connection lifetime
+DATABASES["default"]["OPTIONS"] = {
+    "pool": {
+        "min_size": 2,
+        "max_size": 50,  # tune: max_connections(800) * 0.8 / num_replicas
+        "timeout": 30,
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -522,6 +528,9 @@ CACHE_TIMEOUTS = {
     "DEVICE_CACHE": int(os.environ.get("DEVICE_CACHE_TIMEOUT", "86400")),  # Eliminates hardcoded timeout=86400
     "ASSOCIATION_CACHE": int(os.environ.get("ASSOCIATION_CACHE_TIMEOUT", "86400")),  # 24 hours
     "WEBHOOK_HEALTH": int(os.environ.get("WEBHOOK_HEALTH_CACHE_TIMEOUT", "60")),  # Health check cache
+    "OIDC_USERINFO": int(
+        os.environ.get("OIDC_USERINFO_CACHE_TIMEOUT", "900")
+    ),  # Matches accounts ACCESS_TOKEN_EXPIRE_SECONDS
 }
 
 # Huey Task Configuration
