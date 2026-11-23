@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Poetry for reproducible installs (project uses pyproject.toml)
-ENV POETRY_VERSION=2.2.1
+ENV POETRY_VERSION=2.3.4
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 # Copy dependency files first for caching
@@ -28,6 +28,9 @@ COPY pyproject.toml poetry.lock /app/
 # Configure Poetry to install to the system env (no virtualenv)
 RUN poetry config virtualenvs.create false \
     && poetry install --without dev --no-interaction --no-ansi
+
+# pip is not needed after this; its vendored urllib3/msgpack/setuptools are flagged by Trivy.
+RUN pip uninstall -y pip
 
 # Copy application code
 COPY . /app
